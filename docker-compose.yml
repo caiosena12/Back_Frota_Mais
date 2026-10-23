@@ -1,0 +1,21 @@
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/java:1-21-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    # Compartilha a rede com o banco: dentro do container, o Postgres fica em localhost:5432
+    network_mode: service:db
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: frotamais
+
+volumes:
+  postgres-data:
