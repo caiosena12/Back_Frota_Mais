@@ -1,0 +1,34 @@
+{
+  "name": "Frota+",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "none",
+      "installMaven": "true",
+      "installGradle": "false"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    }
+  },
+  "forwardPorts": [8080, 4200, 5432],
+  "portsAttributes": {
+    "8080": { "label": "API Spring Boot" },
+    "4200": { "label": "Angular" },
+    "5432": { "label": "PostgreSQL" }
+  },
+  "postCreateCommand": "npm install -g @angular/cli",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-boot-dev-pack",
+        "angular.ng-template",
+        "ms-ossdata.vscode-pgsql",
+        "humao.rest-client"
+      ]
+    }
+  }
+}
