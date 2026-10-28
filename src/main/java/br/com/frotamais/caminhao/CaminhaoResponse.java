@@ -4,7 +4,8 @@ public record CaminhaoResponse(
         Long id,
         String placa,
         String modelo,
-        String apelido,
+        Integer ano,
+        StatusCaminhao status,
         Integer capacidadeTanqueLitros) {
 
     public static CaminhaoResponse de(Caminhao c) {
@@ -12,7 +13,8 @@ public record CaminhaoResponse(
                 c.getId(),
                 c.getPlaca(),
                 c.getModelo(),
-                c.getApelido(),
+                c.getAno(),
+                c.getStatus(),
                 c.getCapacidadeTanqueLitros());
     }
 }
