@@ -1,6 +1,6 @@
 # Contexto técnico e regras de negócio do Frota+
 
-**Última revisão:** 02/11/2026, com base no commit `d0797b7`.
+**Última revisão:** 02/11/2026, com base no commit `bfd02ea`.
 **Repositório do back-end:** `https://github.com/caiosena12/Back_Frota_Mais` (no Codespaces: `/workspaces/Back_Frota_Mais`).
 
 ---
@@ -286,9 +286,13 @@ Back_Frota_Mais/
     │   ├── seguranca/  (SecurityConfig, TokenService, UsuarioLogado)
     │   └── usuario/    (Perfil, Usuario, UsuarioRepository)
     ├── main/resources/application.properties
-    └── test/java/br/com/frotamais/
-        ├── BackendApplicationTests.java
-        └── seguranca/  (SegurancaCaminhaoTest, IsolamentoEmpresaCaminhaoTest)
+    ├── test/java/br/com/frotamais/
+    │   ├── BackendApplicationTests.java
+    │   ├── seguranca/  (SegurancaCaminhaoTest, IsolamentoEmpresaCaminhaoTest, AutenticacaoFluxoRealTest)
+    │   └── suporte/    (GuardaBancoDeTeste, GuardaBancoDeTesteTest)
+    └── test/resources/
+        ├── config/application.properties    # fixa o banco frotamais_test
+        └── META-INF/spring.factories        # registra GuardaBancoDeTeste
 ```
 
 - **Padrão de cada funcionalidade:** pacote por funcionalidade; **Controller → Service → Repository → banco**; entidade JPA separada de **DTOs** (`XRequest`/`XResponse`, como `record`); nomes de domínio em português.
@@ -439,16 +443,26 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 
 ### 6.2 Implementado e nível de evidência
 
-| Item | Evidência |
-|---|---|
-| Registro `201` e login `200` | Código + relato (Postman/curl) |
-| `GET /api/caminhoes` sem token → `401` | Teste automatizado + relato |
-| `POST /api/caminhoes` → `201` e listagem → `200` | Teste de isolamento + relato |
-| Isolamento entre empresas em caminhões | Código + teste de integração; aprovação relatada |
-| MOTORISTA recebe `403` ao criar caminhão | Teste com JWT **simulado**: cobre o `@PreAuthorize`, não o fluxo real |
-| Suíte com 5 testes sem falhas (30/10) | Relato **[NÃO VERIFICADO]** |
+Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações feitas nessa data, sem teste automatizado equivalente.
 
-Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). As três classes usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
+| Item | Teste automatizado | Verificação manual |
+|---|---|---|
+| Registro `201` | `IsolamentoEmpresaCaminhaoTest`, `AutenticacaoFluxoRealTest` | `curl` no backend em execução |
+| Login `200`, com token aceito na rota protegida | `AutenticacaoFluxoRealTest.loginValidoEmiteTokenAceitoNaRotaProtegida` | `curl` no backend em execução |
+| `GET /api/caminhoes` sem token → `401` | `SegurancaCaminhaoTest.deveBloquearListagemSemToken` | `curl` no backend em execução e no JAR |
+| Token malformado → `401` | `SegurancaCaminhaoTest.deveBloquearListagemComTokenInvalido` | `curl` no JAR |
+| `POST /api/caminhoes` → `201` e listagem → `200` | `IsolamentoEmpresaCaminhaoTest` | Só a listagem, com `curl` |
+| Isolamento entre empresas em caminhões: listagem vazia e `404` em consulta, alteração e exclusão | `IsolamentoEmpresaCaminhaoTest` | Não |
+| Token com outra chave, expirado, de outro emissor, com `empresaId` divergente ou de usuário inexistente → `401` | `AutenticacaoFluxoRealTest` | Só outra chave: token forjado com a chave pública de teste |
+| Usuário desativado perde o acesso e não consegue fazer login | `AutenticacaoFluxoRealTest.desativarUsuarioInvalidaTokenJaEmitidoEBloqueiaLogin` | Não |
+| MOTORISTA recebe `403` ao criar caminhão | Simulado em `SegurancaCaminhaoTest` e com filtro real em `AutenticacaoFluxoRealTest.perfilVemDoBancoEMotoristaNaoCadastraCaminhao`, usando perfil alterado no banco | Não |
+| `alg=none` e assinatura adulterada → `401` | Não | `curl` no backend em execução |
+| Validação do login → `400` | Não | `curl` no JAR |
+| Suíte com 17 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, no commit `8e4f719` | Não se aplica |
+
+**Não comprovado:** não existe forma de criar MOTORISTA pela API, então um MOTORISTA criado pelo fluxo real nunca foi testado. O relato de 5 testes sem falhas em 30/10 continua **[NÃO VERIFICADO]**. A lista completa está na seção 6.4.
+
+Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). Hoje, as cinco classes com `@SpringBootTest` usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
 
 ### 6.3 Build, `pom.xml` e testes
 
@@ -486,7 +500,6 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 - O dev container **não tem Docker disponível** para Testcontainers.
 - **Dependências limpas em 02/11/2026:** removidos `spring-boot-starter-web` (obsoleto no próprio POM publicado, em favor de `spring-boot-starter-webmvc`), `spring-boot-starter-jackson`, `spring-boot-starter-security`, `spring-security-oauth2-resource-server`, `spring-security-oauth2-jose` e `spring-boot-starter-validation-test`. Todos já chegavam por outras dependências: as 82 bibliotecas do JAR ficaram idênticas por CRC, nenhuma versão mudou, os 17 testes passaram e o JAR subiu e respondeu `401` e `400` nas verificações manuais.
 - `spring-boot-starter-data-jpa-test` foi **mantido**: nenhum teste o usa hoje, mas ele traz 5 artefatos exclusivos e é necessário para usar `@DataJpaTest`.
-- O README ainda descreve a segurança como "planejada", fala em separação por usuário, não explica como rodar o projeto e usa outro slogan no rodapé.
 
 ### 6.4 Comprovado e não comprovado
 
