@@ -27,7 +27,7 @@ Comandos do Maven Wrapper. Execute a coluna do Codespaces; a coluna Windows é s
 | Subir a API na 8080 | `./run-dev-frotamais.sh` | `.\mvnw.cmd spring-boot:run` |
 | Testar uma classe | `./mvnw test -Dtest=SegurancaCaminhaoTest` | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest` |
 | Testar um método | `./mvnw test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` |
-| Toda a suíte (só com autorização) | `./mvnw test` | `.\mvnw.cmd test` |
+| Toda a suíte | `./mvnw test` | `.\mvnw.cmd test` |
 
 **Scripts `.sh`** rodam apenas em ambiente compatível com Bash, como o Codespaces, Git Bash ou WSL. Não funcionam no PowerShell nem no `cmd`. `run-dev-frotamais.sh` carrega `.frotamais-jwt.env` e exige `JWT_SECRET`; sem o script, a variável precisa estar definida na sessão antes de subir a API.
 
@@ -35,12 +35,11 @@ Não há linter configurado.
 
 ### Testes e banco de dados
 
-Todos os testes atuais sobem o contexto completo contra o banco de desenvolvimento `frotamais`, pois não há perfil de teste. Precisam do Postgres ligado, e `IsolamentoEmpresaCaminhaoTest` grava dados permanentes a cada execução.
+Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frotamais_test`, nunca contra `frotamais`. Precisam do Postgres ligado e do banco criado (`CREATE DATABASE frotamais_test`). `src/test/resources/config/application.properties` fixa a URL, e `GuardaBancoDeTeste` interrompe a execução se a conexão efetiva for outra.
 
-- **Antes de executar testes,** verifique qual perfil e qual banco serão usados: `application.properties`, perfil ativo e variáveis como `DB_URL`, sem imprimir credenciais.
+- **Não enfraqueça esse isolamento:** não remova o guarda nem aponte os testes para `frotamais`.
 - **Não execute sem autorização explícita** testes que gravam dados permanentes no banco de desenvolvimento.
-- **Não execute a suíte inteira automaticamente** enquanto ela incluir esses testes. Isso vale também para comandos que rodam testes indiretamente, como `package` ou `verify` sem `-DskipTests`.
-- **Planejado:** banco de testes isolado (seção 6.6 do documento de contexto). Não implemente sem uma tarefa aprovada.
+- **Testes novos que gravam dados** devem usar `@Transactional`, para desfazer os registros ao final.
 
 ### `pom.xml`
 
