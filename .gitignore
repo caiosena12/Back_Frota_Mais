@@ -35,3 +35,6 @@ build/
 # Segredos locais
 .frotamais-jwt.env
 .backup-auth-frotamais/
+
+# Contexto privado do projeto (nunca publicar)
+contexto-local/
