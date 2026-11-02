@@ -401,7 +401,7 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 | 02/11 | (sem commit) | Rotação do `JWT_SECRET` no Codespaces. Fluxo validado com a chave em uso; um token anterior à rotação **não foi testado** |
 | 02/11 | `f039e6a`, PR #1, merge `a4507bd` | `AutenticacaoFluxoRealTest`: 9 testes com o filtro real; a suíte passa a 14 testes |
 | 02/11 | `640e1e9`, PR #2, merge `bfd02ea` | Testes isolados em `frotamais_test`, com `GuardaBancoDeTeste`; a suíte passa a 17 testes |
-| 02/11 | `5461d6f`, `b090674`, branch `chore/base-confiavel` | Limpeza de dependências e causa da falha do `pom.xml` com CRLF. Sem PR até esta revisão |
+| 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF. Sem PR até esta revisão |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -452,7 +452,7 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 
 ### 6.3 Build, `pom.xml` e testes
 
-- O `pom.xml` tem uma **linha em branco antes de `<?xml`** desde `631358f`. Um parser XML estrito (expat) rejeitou as duas cópias testadas abaixo.
+- O `pom.xml` teve uma **linha em branco antes de `<?xml`** de `631358f` até a correção `1d2b4bb`. Um parser XML estrito (expat) rejeitou as duas cópias testadas abaixo.
 - Resultado do `mvn validate` em **cópias do arquivo**, fora do repositório:
 
 | Conteúdo | Maven 3.9.9 | Maven 3.10.0 |
@@ -475,8 +475,8 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 
 - **Mecanismo:** o `MXParser` do `plexus-utils` 3.6.2, usado pelo Maven 3.10.0, só rejeita a declaração quando o nome dela começa depois da posição 3 do buffer: o bytecode de `parsePI` compara a posição com 3 (`if_icmple`). Com N bytes antes de `<?xml`, o nome começa na posição N+2. A mensagem é `processing instruction can not have PITarget with reserved xml name`, seguida de `Non-parseable POM`.
 - **O arquivo é XML inválido nos dois casos.** O `expat` rejeitou as 10 cópias com qualquer byte antes de `<?xml` e aceitou as 2 sem prefixo. O Maven apenas tolera 1 byte.
-- **Correção recomendada, ainda não aplicada:** remover o byte inicial do `pom.xml`, de modo que o arquivo comece em `<?xml`. As cópias sem prefixo passaram em LF e em CRLF, no Maven e no `expat`. Não é necessário mudar o fim de linha nem o `.gitattributes`.
-- **Limite da investigação:** a conversão do Git no Windows foi reproduzida nos bytes do arquivo, não em um clone real com `core.autocrlf=true`.
+- **Correção aplicada em `1d2b4bb`:** o byte inicial do `pom.xml` foi removido, e o restante do arquivo ficou idêntico byte a byte. A versão corrigida passou em LF e em CRLF, no Maven 3.10.0, no 3.9.9 e no `expat`. Não foi necessário mudar o fim de linha nem o `.gitattributes`.
+- **Clones reais com `core.autocrlf=true`, no Linux:** o commit `abf2bd3` falhou com `Non-parseable POM`, e o `1d2b4bb` passou. **Limite:** não foi testado em uma máquina Windows.
 - **`validate` no Codespaces (02/11/2026, commit `0b1fa02`):** o `./mvnw validate` passou com BUILD SUCCESS no arquivo real, em LF e com a linha em branco, usando Java 21 e o wrapper configurado para Maven 3.10.0. Isso reproduz o resultado da cópia LF, mas não explica a diferença para a cópia CRLF.
 - O notebook Windows não é ambiente de build nem de testes (seção 4.2).
 - **Os testes usam só o banco exclusivo `frotamais_test`.** `src/test/resources/config/application.properties` fixa a URL e vale para todo teste, sem perfil nem anotação; `DB_URL` não a altera. `GuardaBancoDeTeste` consulta `current_database()` assim que o `DataSource` é criado, antes do `ddl-auto`, e interrompe a execução se o banco for outro ou estiver indisponível. Esses arquivos existem só no classpath de teste.
@@ -537,7 +537,6 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 
 **Pendências abertas**
 
-- Aprovar e aplicar a remoção do byte inicial do `pom.xml` (seção 6.3).
 - Decisões do Anexo A e etapas seguintes do roadmap (seção 6.6).
 
 ### 6.5 Status das frentes
@@ -561,7 +560,7 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 
 As etapas são cumulativas. **Segurança, testes e validações evoluem junto com cada funcionalidade.**
 
-1. **Base confiável:** dependências limpas, README atualizado e causa da falha do `pom.xml` comprovada (seção 6.3). **Pendência:** aprovar e aplicar a remoção do byte inicial do `pom.xml`.
+1. **Base confiável: concluída em 02/11/2026 na branch `chore/base-confiavel`, aguardando merge.** Dependências limpas, README atualizado e falha do `pom.xml` corrigida (seção 6.3).
 2. **Testes seguros: concluída em 02/11/2026.** `./mvnw test` usa só `frotamais_test`, sem fallback para `frotamais` (seção 6.3).
 3. **Testes de segurança** com o filtro real: token inválido e expirado, usuário desativado, `empresaId` divergente, isolamento entre empresas.
 4. **Migrations e CI:** Flyway com o schema atual como V1, e CI. Isso precede a etapa 7, porque a restrição de e-mail precisa ser removida do banco.
