@@ -27,7 +27,7 @@
 
 ### 0.3 Limites da verificação
 
-Build completo e testes **não foram executados** nesta revisão. Rodar os testes grava no banco de desenvolvimento (seção 6.3). O `pom.xml` foi verificado com `mvn validate`, sobre cópias, fora do repositório. Resultados de testes citados vêm de relatos do responsável pelo produto.
+Build completo e testes **não foram executados** nesta revisão. Os testes foram executados depois, em 02/11/2026, no banco exclusivo `frotamais_test` (seção 6.3). O `pom.xml` foi verificado com `mvn validate`, sobre cópias, fora do repositório. Resultados de testes citados vêm de relatos do responsável pelo produto.
 
 ---
 
@@ -442,7 +442,7 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 | MOTORISTA recebe `403` ao criar caminhão | Teste com JWT **simulado**: cobre o `@PreAuthorize`, não o fluxo real |
 | Suíte com 5 testes sem falhas (30/10) | Relato **[NÃO VERIFICADO]** |
 
-Testes existentes (5): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). As três classes usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
+Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). As três classes usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
 
 ### 6.3 Build, `pom.xml` e testes
 
@@ -456,8 +456,13 @@ Testes existentes (5): `BackendApplicationTests.contextLoads`; `SegurancaCaminha
 
 - **A causa da diferença ainda não foi comprovada.** O teste mostra que as duas cópias tiveram resultados diferentes, mas não explica o motivo. Não atribuir a causa definitivamente ao CRLF nem à linha em branco.
 - **Limites do teste:** só o `validate` foi executado, apenas nessas cópias e fora do Codespaces. Compilação e testes não foram executados. O relato de BUILD SUCCESS é compatível com o resultado da cópia LF, mas não foi reproduzido.
+- **`validate` no Codespaces (02/11/2026, commit `0b1fa02`):** o `./mvnw validate` passou com BUILD SUCCESS no arquivo real, em LF e com a linha em branco, usando Java 21 e o wrapper configurado para Maven 3.10.0. Isso reproduz o resultado da cópia LF, mas não explica a diferença para a cópia CRLF.
 - O notebook Windows não é ambiente de build nem de testes (seção 4.2).
-- **Os testes usam o banco de desenvolvimento `frotamais`.** Não há perfil de teste nem `src/test/resources`. Cada execução do teste de isolamento deixa 2 empresas, 2 usuários e 1 caminhão. Ao criar um ambiente de teste, considere que o dev container **não tem Docker disponível** para Testcontainers.
+- **Os testes usam só o banco exclusivo `frotamais_test`.** `src/test/resources/config/application.properties` fixa a URL e vale para todo teste, sem perfil nem anotação; `DB_URL` não a altera. `GuardaBancoDeTeste` consulta `current_database()` assim que o `DataSource` é criado, antes do `ddl-auto`, e interrompe a execução se o banco for outro ou estiver indisponível. Esses arquivos existem só no classpath de teste.
+- **O banco precisa existir:** a suíte não o cria. Crie uma vez com `CREATE DATABASE frotamais_test`; o schema vem do `ddl-auto=update`. Os testes que gravam dados usam `@Transactional` com rollback, então não deixam registros.
+- **Verificado em 02/11/2026 no Codespaces:** `./mvnw test` executado duas vezes, 17 testes, 0 falhas, 0 erros. Inserções, atualizações, exclusões e sessões de `frotamais` ficaram iguais em cada execução, e as contagens de `frotamais_test` não cresceram. Forçar `frotamais` com `SPRING_DATASOURCE_URL` bloqueou os 17 testes, sem escrita nem DDL; banco inexistente e servidor indisponível falharam com mensagem clara; `DB_URL` apontando para `frotamais` foi ignorado.
+- **Limites do isolamento:** usuário e senha são os mesmos do banco de desenvolvimento, no mesmo servidor, e o guarda precisa abrir uma conexão de leitura para verificar o banco. O rollback não exercita falhas que só aparecem no commit. O guarda não cobre código executado fora de um contexto Spring.
+- O dev container **não tem Docker disponível** para Testcontainers.
 - O `pom.xml` tem starters **redundantes**. `spring-boot-starter-web` está **deprecated** em favor de `spring-boot-starter-webmvc`, já declarado.
 - O README ainda descreve a segurança como "planejada", fala em separação por usuário, não explica como rodar o projeto e usa outro slogan no rodapé.
 
@@ -476,7 +481,7 @@ Testes existentes (5): `BackendApplicationTests.contextLoads`; `SegurancaCaminha
 - Registro e login JWT, com perfis lidos do banco.
 - Isolamento por empresa em caminhões.
 - CRUD de caminhões, com escrita só para DONO.
-- 5 testes automatizados.
+- 17 testes automatizados.
 
 **Em desenvolvimento**
 - Alinhamento da documentação e configuração do modo de trabalho (`CLAUDE.md`).
@@ -491,7 +496,7 @@ Testes existentes (5): `BackendApplicationTests.contextLoads`; `SegurancaCaminha
 As etapas são cumulativas. **Segurança, testes e validações evoluem junto com cada funcionalidade.**
 
 1. **Base confiável:** limpar dependências e atualizar o README. **Pendência técnica:** investigar por que o `validate` do `pom.xml` passou na cópia LF e falhou na cópia CRLF (seção 6.3). Nenhuma correção definitiva deve ser recomendada enquanto a causa não estiver comprovada.
-2. **Testes seguros:** perfil e banco próprios, para que rodar testes não toque em `frotamais`.
+2. **Testes seguros: concluída em 02/11/2026.** `./mvnw test` usa só `frotamais_test`, sem fallback para `frotamais` (seção 6.3).
 3. **Testes de segurança** com o filtro real: token inválido e expirado, usuário desativado, `empresaId` divergente, isolamento entre empresas.
 4. **Migrations e CI:** Flyway com o schema atual como V1, e CI. Isso precede a etapa 7, porque a restrição de e-mail precisa ser removida do banco.
 5. **Tratamento de erros:** formato único, causa registrada em log e mensagens que chegam ao cliente.
@@ -555,7 +560,7 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 - **Variáveis:** `JWT_SECRET` (Base64, ≥32 bytes) e `JWT_HORAS` ficam em `.frotamais-jwt.env`, fora do Git. `DB_URL`, `DB_USER` e `DB_PASSWORD` só para sobrescrever os padrões.
 - **Rodar a API:** `./run-dev-frotamais.sh`, em um terminal dedicado.
 - **Testar sem token:** `curl -i http://localhost:8080/api/caminhoes` deve dar `401`.
-- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test`. **Atenção: os testes atuais gravam no banco `frotamais`.**
+- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test`. Os testes usam só `frotamais_test` e falham se ele não existir (seção 6.3).
 - **Banco:** `psql -h localhost -p 5432 -U postgres -d frotamais`; `\dt`, `\conninfo`; `pg_isready -h localhost -p 5432`.
 - **Portas:** 8080 (API), 4200 (Angular), 5432 (PostgreSQL). **Deixar a 5432 privada.** A 8080 só fica pública temporariamente, para testes externos.
 - **Postman:** usar a URL encaminhada da porta 8080; rotas protegidas com *Bearer Token*; corpo `raw` → `JSON`.

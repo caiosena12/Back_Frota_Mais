@@ -1,0 +1,1 @@
+org.springframework.context.ApplicationContextInitializer=br.com.frotamais.suporte.GuardaBancoDeTeste
