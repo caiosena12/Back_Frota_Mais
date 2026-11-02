@@ -43,7 +43,7 @@ Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frota
 
 ### `pom.xml`
 
-O arquivo tem uma linha em branco antes de `<?xml`. Essa posição é inválida em XML, independentemente do tipo de quebra de linha, e o comportamento das ferramentas pode variar. Antes de recomendar uma correção, verifique os bytes do arquivo e reproduza o erro no ambiente em questão.
+O arquivo tem uma linha em branco antes de `<?xml`, o que é inválido em XML. O Maven tolera no máximo 1 byte nessa posição: `\n` passa e `\r\n` falha com `Non-parseable POM`. A causa foi comprovada (seção 6.3 do documento de contexto), e a correção recomendada, remover esse byte inicial, ainda não foi aplicada.
 
 ## Arquitetura
 

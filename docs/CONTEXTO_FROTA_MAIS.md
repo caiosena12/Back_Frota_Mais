@@ -454,8 +454,23 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 | Cópia LF (conteúdo do commit `d0797b7`) | passou | passou |
 | Cópia CRLF (clone Windows com `core.autocrlf=true`) | falhou: `Non-parseable POM` | falhou: `Non-parseable POM` |
 
-- **A causa da diferença ainda não foi comprovada.** O teste mostra que as duas cópias tiveram resultados diferentes, mas não explica o motivo. Não atribuir a causa definitivamente ao CRLF nem à linha em branco.
-- **Limites do teste:** só o `validate` foi executado, apenas nessas cópias e fora do Codespaces. Compilação e testes não foram executados. O relato de BUILD SUCCESS é compatível com o resultado da cópia LF, mas não foi reproduzido.
+- **Causa comprovada em 02/11/2026:** o que decide é a **quantidade de bytes antes de `<?xml`**, não o tipo de quebra de linha do arquivo. O Maven aceita **no máximo 1 byte** antes da declaração. Em LF, a linha em branco é 1 byte (`\n`) e passa; em CRLF, é 2 bytes (`\r\n`) e falha.
+- **Limites do teste da tabela acima:** só o `validate` foi executado, apenas nessas cópias e fora do Codespaces. Compilação e testes não foram executados.
+- **Matriz da investigação:** 12 cópias temporárias, com resultado igual no Maven 3.10.0 e no 3.9.9.
+
+| Bytes antes de `<?xml` | Corpo do arquivo | `validate` |
+|---|---|---|
+| nenhum | LF ou CRLF | passou |
+| 1 (`\n`, `\r`, espaço ou tab) | LF | passou |
+| 1 (`\n`) | CRLF | passou |
+| 2 (`\r\n`) | LF ou CRLF | falhou |
+| 2 (`\n\n` ou dois espaços) | LF | falhou |
+| 3 (`\n\n\n`) | LF | falhou |
+
+- **Mecanismo:** o `MXParser` do `plexus-utils` 3.6.2, usado pelo Maven 3.10.0, só rejeita a declaração quando o nome dela começa depois da posição 3 do buffer: o bytecode de `parsePI` compara a posição com 3 (`if_icmple`). Com N bytes antes de `<?xml`, o nome começa na posição N+2. A mensagem é `processing instruction can not have PITarget with reserved xml name`, seguida de `Non-parseable POM`.
+- **O arquivo é XML inválido nos dois casos.** O `expat` rejeitou as 10 cópias com qualquer byte antes de `<?xml` e aceitou as 2 sem prefixo. O Maven apenas tolera 1 byte.
+- **Correção recomendada, ainda não aplicada:** remover o byte inicial do `pom.xml`, de modo que o arquivo comece em `<?xml`. As cópias sem prefixo passaram em LF e em CRLF, no Maven e no `expat`. Não é necessário mudar o fim de linha nem o `.gitattributes`.
+- **Limite da investigação:** a conversão do Git no Windows foi reproduzida nos bytes do arquivo, não em um clone real com `core.autocrlf=true`.
 - **`validate` no Codespaces (02/11/2026, commit `0b1fa02`):** o `./mvnw validate` passou com BUILD SUCCESS no arquivo real, em LF e com a linha em branco, usando Java 21 e o wrapper configurado para Maven 3.10.0. Isso reproduz o resultado da cópia LF, mas não explica a diferença para a cópia CRLF.
 - O notebook Windows não é ambiente de build nem de testes (seção 4.2).
 - **Os testes usam só o banco exclusivo `frotamais_test`.** `src/test/resources/config/application.properties` fixa a URL e vale para todo teste, sem perfil nem anotação; `DB_URL` não a altera. `GuardaBancoDeTeste` consulta `current_database()` assim que o `DataSource` é criado, antes do `ddl-auto`, e interrompe a execução se o banco for outro ou estiver indisponível. Esses arquivos existem só no classpath de teste.
@@ -463,7 +478,8 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 - **Verificado em 02/11/2026 no Codespaces:** `./mvnw test` executado duas vezes, 17 testes, 0 falhas, 0 erros. Inserções, atualizações, exclusões e sessões de `frotamais` ficaram iguais em cada execução, e as contagens de `frotamais_test` não cresceram. Forçar `frotamais` com `SPRING_DATASOURCE_URL` bloqueou os 17 testes, sem escrita nem DDL; banco inexistente e servidor indisponível falharam com mensagem clara; `DB_URL` apontando para `frotamais` foi ignorado.
 - **Limites do isolamento:** usuário e senha são os mesmos do banco de desenvolvimento, no mesmo servidor, e o guarda precisa abrir uma conexão de leitura para verificar o banco. O rollback não exercita falhas que só aparecem no commit. O guarda não cobre código executado fora de um contexto Spring.
 - O dev container **não tem Docker disponível** para Testcontainers.
-- O `pom.xml` tem starters **redundantes**. `spring-boot-starter-web` está **deprecated** em favor de `spring-boot-starter-webmvc`, já declarado.
+- **Dependências limpas em 02/11/2026:** removidos `spring-boot-starter-web` (obsoleto no próprio POM publicado, em favor de `spring-boot-starter-webmvc`), `spring-boot-starter-jackson`, `spring-boot-starter-security`, `spring-security-oauth2-resource-server`, `spring-security-oauth2-jose` e `spring-boot-starter-validation-test`. Todos já chegavam por outras dependências: as 82 bibliotecas do JAR ficaram idênticas por CRC, nenhuma versão mudou, os 17 testes passaram e o JAR subiu e respondeu `401` e `400` nas verificações manuais.
+- `spring-boot-starter-data-jpa-test` foi **mantido**: nenhum teste o usa hoje, mas ele traz 5 artefatos exclusivos e é necessário para usar `@DataJpaTest`.
 - O README ainda descreve a segurança como "planejada", fala em separação por usuário, não explica como rodar o projeto e usa outro slogan no rodapé.
 
 ### 6.4 Não comprovado
@@ -495,7 +511,7 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 
 As etapas são cumulativas. **Segurança, testes e validações evoluem junto com cada funcionalidade.**
 
-1. **Base confiável:** limpar dependências e atualizar o README. **Pendência técnica:** investigar por que o `validate` do `pom.xml` passou na cópia LF e falhou na cópia CRLF (seção 6.3). Nenhuma correção definitiva deve ser recomendada enquanto a causa não estiver comprovada.
+1. **Base confiável:** dependências limpas, README atualizado e causa da falha do `pom.xml` comprovada (seção 6.3). **Pendência:** aprovar e aplicar a remoção do byte inicial do `pom.xml`.
 2. **Testes seguros: concluída em 02/11/2026.** `./mvnw test` usa só `frotamais_test`, sem fallback para `frotamais` (seção 6.3).
 3. **Testes de segurança** com o filtro real: token inválido e expirado, usuário desativado, `empresaId` divergente, isolamento entre empresas.
 4. **Migrations e CI:** Flyway com o schema atual como V1, e CI. Isso precede a etapa 7, porque a restrição de e-mail precisa ser removida do banco.
