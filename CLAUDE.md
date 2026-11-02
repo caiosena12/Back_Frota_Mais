@@ -43,7 +43,7 @@ Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frota
 
 ### `pom.xml`
 
-O arquivo tem uma linha em branco antes de `<?xml`. Essa posição é inválida em XML, independentemente do tipo de quebra de linha, e o comportamento das ferramentas pode variar. Antes de recomendar uma correção, verifique os bytes do arquivo e reproduza o erro no ambiente em questão.
+O byte inicial antes de `<?xml`, que tornava o arquivo XML inválido, foi removido no commit `1d2b4bb`. O arquivo corrigido passou no Maven 3.9.9 e no 3.10.0, com LF e com CRLF. O Maven tolera no máximo 1 byte antes da declaração, e `\r\n` já são 2 (seção 6.3 do documento de contexto). Se aparecer de novo um erro de parsing como `Non-parseable POM`, investigue primeiro os bytes iniciais: `head -c 6 pom.xml | od -c`.
 
 ## Arquitetura
 

@@ -1,6 +1,6 @@
 # Contexto técnico e regras de negócio do Frota+
 
-**Última revisão:** 02/11/2026, com base no commit `d0797b7`.
+**Última revisão:** 02/11/2026, com base no commit `bfd02ea`.
 **Repositório do back-end:** `https://github.com/caiosena12/Back_Frota_Mais` (no Codespaces: `/workspaces/Back_Frota_Mais`).
 
 ---
@@ -286,9 +286,13 @@ Back_Frota_Mais/
     │   ├── seguranca/  (SecurityConfig, TokenService, UsuarioLogado)
     │   └── usuario/    (Perfil, Usuario, UsuarioRepository)
     ├── main/resources/application.properties
-    └── test/java/br/com/frotamais/
-        ├── BackendApplicationTests.java
-        └── seguranca/  (SegurancaCaminhaoTest, IsolamentoEmpresaCaminhaoTest)
+    ├── test/java/br/com/frotamais/
+    │   ├── BackendApplicationTests.java
+    │   ├── seguranca/  (SegurancaCaminhaoTest, IsolamentoEmpresaCaminhaoTest, AutenticacaoFluxoRealTest)
+    │   └── suporte/    (GuardaBancoDeTeste, GuardaBancoDeTesteTest)
+    └── test/resources/
+        ├── config/application.properties    # fixa o banco frotamais_test
+        └── META-INF/spring.factories        # registra GuardaBancoDeTeste
 ```
 
 - **Padrão de cada funcionalidade:** pacote por funcionalidade; **Controller → Service → Repository → banco**; entidade JPA separada de **DTOs** (`XRequest`/`XResponse`, como `record`); nomes de domínio em português.
@@ -396,6 +400,12 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 | 28/10 | `631358f` | Testes de segurança e isolamento; ajustes no `pom.xml` |
 | 30/10 | (sem commit) | Relato: **5 testes, 0 falhas, BUILD SUCCESS** **[NÃO VERIFICADO]** |
 | 02/11 | `d0797b7` | Chave exclusiva de teste em `BackendApplicationTests` |
+| 02/11 | `fdeb23f` | `.gitignore` passa a ignorar `contexto-local/` |
+| 02/11 | `40f92ba`, `0b1fa02` | Este documento e o `CLAUDE.md` |
+| 02/11 | (sem commit) | Rotação do `JWT_SECRET` no Codespaces. Fluxo validado com a chave em uso; um token anterior à rotação **não foi testado** |
+| 02/11 | `f039e6a`, PR #1, merge `a4507bd` | `AutenticacaoFluxoRealTest`: 9 testes com o filtro real; a suíte passa a 14 testes |
+| 02/11 | `640e1e9`, PR #2, merge `bfd02ea` | Testes isolados em `frotamais_test`, com `GuardaBancoDeTeste`; a suíte passa a 17 testes |
+| 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF. Sem PR até esta revisão |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -433,20 +443,30 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 
 ### 6.2 Implementado e nível de evidência
 
-| Item | Evidência |
-|---|---|
-| Registro `201` e login `200` | Código + relato (Postman/curl) |
-| `GET /api/caminhoes` sem token → `401` | Teste automatizado + relato |
-| `POST /api/caminhoes` → `201` e listagem → `200` | Teste de isolamento + relato |
-| Isolamento entre empresas em caminhões | Código + teste de integração; aprovação relatada |
-| MOTORISTA recebe `403` ao criar caminhão | Teste com JWT **simulado**: cobre o `@PreAuthorize`, não o fluxo real |
-| Suíte com 5 testes sem falhas (30/10) | Relato **[NÃO VERIFICADO]** |
+Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações feitas nessa data, sem teste automatizado equivalente.
 
-Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). As três classes usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
+| Item | Teste automatizado | Verificação manual |
+|---|---|---|
+| Registro `201` | `IsolamentoEmpresaCaminhaoTest`, `AutenticacaoFluxoRealTest` | `curl` no backend em execução |
+| Login `200`, com token aceito na rota protegida | `AutenticacaoFluxoRealTest.loginValidoEmiteTokenAceitoNaRotaProtegida` | `curl` no backend em execução |
+| `GET /api/caminhoes` sem token → `401` | `SegurancaCaminhaoTest.deveBloquearListagemSemToken` | `curl` no backend em execução e no JAR |
+| Token malformado → `401` | `SegurancaCaminhaoTest.deveBloquearListagemComTokenInvalido` | `curl` no JAR |
+| `POST /api/caminhoes` → `201` e listagem → `200` | `IsolamentoEmpresaCaminhaoTest` | Só a listagem, com `curl` |
+| Isolamento entre empresas em caminhões: listagem vazia e `404` em consulta, alteração e exclusão | `IsolamentoEmpresaCaminhaoTest` | Não |
+| Token com outra chave, expirado, de outro emissor, com `empresaId` divergente ou de usuário inexistente → `401` | `AutenticacaoFluxoRealTest` | Só outra chave: token forjado com a chave pública de teste |
+| Usuário desativado perde o acesso e não consegue fazer login | `AutenticacaoFluxoRealTest.desativarUsuarioInvalidaTokenJaEmitidoEBloqueiaLogin` | Não |
+| MOTORISTA recebe `403` ao criar caminhão | Simulado em `SegurancaCaminhaoTest` e com filtro real em `AutenticacaoFluxoRealTest.perfilVemDoBancoEMotoristaNaoCadastraCaminhao`, usando perfil alterado no banco | Não |
+| `alg=none` e assinatura adulterada → `401` | Não | `curl` no backend em execução |
+| Validação do login → `400` | Não | `curl` no JAR |
+| Suíte com 17 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, no commit `8e4f719` | Não se aplica |
+
+**Não comprovado:** não existe forma de criar MOTORISTA pela API, então um MOTORISTA criado pelo fluxo real nunca foi testado. O relato de 5 testes sem falhas em 30/10 continua **[NÃO VERIFICADO]**. A lista completa está na seção 6.4.
+
+Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendApplicationTests.contextLoads`; `SegurancaCaminhaoTest` (sem token, token inválido, motorista simulado); `IsolamentoEmpresaCaminhaoTest` (1 teste com duas empresas reais). Hoje, as cinco classes com `@SpringBootTest` usam chave exclusiva de teste, que não deve ser reutilizada fora delas.
 
 ### 6.3 Build, `pom.xml` e testes
 
-- O `pom.xml` tem uma **linha em branco antes de `<?xml`** desde `631358f`. Um parser XML estrito (expat) rejeitou as duas cópias testadas abaixo.
+- O `pom.xml` teve uma **linha em branco antes de `<?xml`** de `631358f` até a correção `1d2b4bb`. Um parser XML estrito (expat) rejeitou as duas cópias testadas abaixo.
 - Resultado do `mvn validate` em **cópias do arquivo**, fora do repositório:
 
 | Conteúdo | Maven 3.9.9 | Maven 3.10.0 |
@@ -454,8 +474,23 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 | Cópia LF (conteúdo do commit `d0797b7`) | passou | passou |
 | Cópia CRLF (clone Windows com `core.autocrlf=true`) | falhou: `Non-parseable POM` | falhou: `Non-parseable POM` |
 
-- **A causa da diferença ainda não foi comprovada.** O teste mostra que as duas cópias tiveram resultados diferentes, mas não explica o motivo. Não atribuir a causa definitivamente ao CRLF nem à linha em branco.
-- **Limites do teste:** só o `validate` foi executado, apenas nessas cópias e fora do Codespaces. Compilação e testes não foram executados. O relato de BUILD SUCCESS é compatível com o resultado da cópia LF, mas não foi reproduzido.
+- **Causa comprovada em 02/11/2026:** o que decide é a **quantidade de bytes antes de `<?xml`**, não o tipo de quebra de linha do arquivo. O Maven aceita **no máximo 1 byte** antes da declaração. Em LF, a linha em branco é 1 byte (`\n`) e passa; em CRLF, é 2 bytes (`\r\n`) e falha.
+- **Limites do teste da tabela acima:** só o `validate` foi executado, apenas nessas cópias e fora do Codespaces. Compilação e testes não foram executados.
+- **Matriz da investigação:** 12 cópias temporárias, com resultado igual no Maven 3.10.0 e no 3.9.9.
+
+| Bytes antes de `<?xml` | Corpo do arquivo | `validate` |
+|---|---|---|
+| nenhum | LF ou CRLF | passou |
+| 1 (`\n`, `\r`, espaço ou tab) | LF | passou |
+| 1 (`\n`) | CRLF | passou |
+| 2 (`\r\n`) | LF ou CRLF | falhou |
+| 2 (`\n\n` ou dois espaços) | LF | falhou |
+| 3 (`\n\n\n`) | LF | falhou |
+
+- **Mecanismo:** o `MXParser` do `plexus-utils` 3.6.2, usado pelo Maven 3.10.0, só rejeita a declaração quando o nome dela começa depois da posição 3 do buffer: o bytecode de `parsePI` compara a posição com 3 (`if_icmple`). Com N bytes antes de `<?xml`, o nome começa na posição N+2. A mensagem é `processing instruction can not have PITarget with reserved xml name`, seguida de `Non-parseable POM`.
+- **O arquivo é XML inválido nos dois casos.** O `expat` rejeitou as 10 cópias com qualquer byte antes de `<?xml` e aceitou as 2 sem prefixo. O Maven apenas tolera 1 byte.
+- **Correção aplicada em `1d2b4bb`:** o byte inicial do `pom.xml` foi removido, e o restante do arquivo ficou idêntico byte a byte. A versão corrigida passou em LF e em CRLF, no Maven 3.10.0, no 3.9.9 e no `expat`. Não foi necessário mudar o fim de linha nem o `.gitattributes`.
+- **Clones reais com `core.autocrlf=true`, no Linux:** o commit `abf2bd3` falhou com `Non-parseable POM`, e o `1d2b4bb` passou. **Limite:** não foi testado em uma máquina Windows.
 - **`validate` no Codespaces (02/11/2026, commit `0b1fa02`):** o `./mvnw validate` passou com BUILD SUCCESS no arquivo real, em LF e com a linha em branco, usando Java 21 e o wrapper configurado para Maven 3.10.0. Isso reproduz o resultado da cópia LF, mas não explica a diferença para a cópia CRLF.
 - O notebook Windows não é ambiente de build nem de testes (seção 4.2).
 - **Os testes usam só o banco exclusivo `frotamais_test`.** `src/test/resources/config/application.properties` fixa a URL e vale para todo teste, sem perfil nem anotação; `DB_URL` não a altera. `GuardaBancoDeTeste` consulta `current_database()` assim que o `DataSource` é criado, antes do `ddl-auto`, e interrompe a execução se o banco for outro ou estiver indisponível. Esses arquivos existem só no classpath de teste.
@@ -463,16 +498,59 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 - **Verificado em 02/11/2026 no Codespaces:** `./mvnw test` executado duas vezes, 17 testes, 0 falhas, 0 erros. Inserções, atualizações, exclusões e sessões de `frotamais` ficaram iguais em cada execução, e as contagens de `frotamais_test` não cresceram. Forçar `frotamais` com `SPRING_DATASOURCE_URL` bloqueou os 17 testes, sem escrita nem DDL; banco inexistente e servidor indisponível falharam com mensagem clara; `DB_URL` apontando para `frotamais` foi ignorado.
 - **Limites do isolamento:** usuário e senha são os mesmos do banco de desenvolvimento, no mesmo servidor, e o guarda precisa abrir uma conexão de leitura para verificar o banco. O rollback não exercita falhas que só aparecem no commit. O guarda não cobre código executado fora de um contexto Spring.
 - O dev container **não tem Docker disponível** para Testcontainers.
-- O `pom.xml` tem starters **redundantes**. `spring-boot-starter-web` está **deprecated** em favor de `spring-boot-starter-webmvc`, já declarado.
-- O README ainda descreve a segurança como "planejada", fala em separação por usuário, não explica como rodar o projeto e usa outro slogan no rodapé.
+- **Dependências limpas em 02/11/2026:** removidos `spring-boot-starter-web` (obsoleto no próprio POM publicado, em favor de `spring-boot-starter-webmvc`), `spring-boot-starter-jackson`, `spring-boot-starter-security`, `spring-security-oauth2-resource-server`, `spring-security-oauth2-jose` e `spring-boot-starter-validation-test`. Todos já chegavam por outras dependências: as 82 bibliotecas do JAR ficaram idênticas por CRC, nenhuma versão mudou, os 17 testes passaram e o JAR subiu e respondeu `401` e `400` nas verificações manuais.
+- `spring-boot-starter-data-jpa-test` foi **mantido**: nenhum teste o usa hoje, mas ele traz 5 artefatos exclusivos e é necessário para usar `@DataJpaTest`.
 
-### 6.4 Não comprovado
+### 6.4 Comprovado e não comprovado
 
-- `GET /{id}`, `PUT` e `DELETE` no fluxo feliz; `400` de validação e `409` de placa duplicada pela API.
-- MOTORISTA com token real.
-- Token expirado, com assinatura de outra chave, `alg=none`, emissor errado, subject inválido, usuário desativado e `empresaId` divergente.
-- Corpo real das respostas de erro.
-- Schema real do banco de desenvolvimento.
+Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
+
+**Funcionalidades implementadas**
+
+- Registro de empresa com usuário DONO e login com JWT.
+- Validação do token e do usuário a cada requisição, com perfil lido do banco.
+- CRUD de caminhões com isolamento por empresa e escrita só para DONO.
+
+**Testes existentes**
+
+| Classe | Testes | O que cobre |
+|---|---|---|
+| `BackendApplicationTests` | 1 | Subida do contexto |
+| `SegurancaCaminhaoTest` | 3 | Sem token, token inválido e MOTORISTA simulado com `jwt()` |
+| `IsolamentoEmpresaCaminhaoTest` | 1 | Duas empresas com tokens reais: listagem, consulta, alteração e exclusão entre empresas |
+| `AutenticacaoFluxoRealTest` | 9 | Filtro real: login, tokens recusados, usuário desativado e perfil lido do banco |
+| `GuardaBancoDeTesteTest` | 3 | Banco efetivo da suíte e recusa de outro banco |
+
+**Alterações por PR**
+
+- **PR #1** (`f039e6a`): adicionou `AutenticacaoFluxoRealTest`, sem mudar o código da aplicação.
+- **PR #2** (`640e1e9`): isolou os testes em `frotamais_test`, adicionou o guarda, o rollback em `IsolamentoEmpresaCaminhaoTest` e os testes do guarda, sem mudar o código da aplicação.
+
+**Comprovado por teste automatizado**
+
+- `GET /{id}` no fluxo feliz, pela empresa dona do caminhão.
+- Token recusado: outra chave, expirado, emissor errado, `empresaId` divergente e usuário inexistente.
+- Usuário desativado perde o acesso com token já emitido e não consegue fazer login.
+- Login recusado por senha incorreta ou e-mail inexistente.
+- Usuário com perfil MOTORISTA no banco recebe `403` ao criar caminhão, mesmo com token que diz DONO.
+
+**Verificado manualmente, sem teste automatizado**
+
+- `alg=none`, assinatura adulterada e token forjado com a chave pública de teste: `401` no backend em execução.
+- Corpo do `400` de validação no login: `{"status":400,"detalhes":[...],"erro":"Dados inválidos"}`.
+- Tabelas `caminhoes`, `empresas` e `usuarios` e colunas de `usuarios` no banco de desenvolvimento.
+
+**Ainda não comprovado**
+
+- `PUT` e `DELETE` no fluxo feliz; `400` de validação e `409` de placa duplicada em caminhões.
+- Subject não numérico no token.
+- Corpo real das respostas `401`, `403`, `404` e `409`.
+- Restrições e índices reais do banco de desenvolvimento.
+- Que a chave anterior à rotação foi recusada: falta testar um token antigo.
+
+**Pendências abertas**
+
+- Decisões do Anexo A e etapas seguintes do roadmap (seção 6.6).
 
 ### 6.5 Status das frentes
 
@@ -495,7 +573,7 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 
 As etapas são cumulativas. **Segurança, testes e validações evoluem junto com cada funcionalidade.**
 
-1. **Base confiável:** limpar dependências e atualizar o README. **Pendência técnica:** investigar por que o `validate` do `pom.xml` passou na cópia LF e falhou na cópia CRLF (seção 6.3). Nenhuma correção definitiva deve ser recomendada enquanto a causa não estiver comprovada.
+1. **Base confiável: concluída em 02/11/2026 na branch `chore/base-confiavel`, aguardando merge.** Dependências limpas, README atualizado e falha do `pom.xml` corrigida (seção 6.3).
 2. **Testes seguros: concluída em 02/11/2026.** `./mvnw test` usa só `frotamais_test`, sem fallback para `frotamais` (seção 6.3).
 3. **Testes de segurança** com o filtro real: token inválido e expirado, usuário desativado, `empresaId` divergente, isolamento entre empresas.
 4. **Migrations e CI:** Flyway com o schema atual como V1, e CI. Isso precede a etapa 7, porque a restrição de e-mail precisa ser removida do banco.

@@ -1,4 +1,3 @@
-
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
@@ -40,12 +39,6 @@
       <artifactId>spring-boot-starter-webmvc</artifactId>
     </dependency>
 
-    <!-- Jackson para processamento JSON -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-jackson</artifactId>
-    </dependency>
-
 
     <!-- Banco de dados PostgreSQL -->
     <dependency>
@@ -61,13 +54,6 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Testes de validação -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-validation-test</artifactId>
-      <scope>test</scope>
-    </dependency>
-
     <!-- Testes da camada Web MVC -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -75,31 +61,7 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Segurança -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-security</artifactId>
-    </dependency>
-
-    <!-- Validação de tokens JWT -->
-    <dependency>
-      <groupId>org.springframework.security</groupId>
-      <artifactId>spring-security-oauth2-resource-server</artifactId>
-    </dependency>
-
-    <!-- Criptografia e suporte a JWT -->
-    <dependency>
-      <groupId>org.springframework.security</groupId>
-      <artifactId>spring-security-oauth2-jose</artifactId>
-    </dependency>
-
-    <!-- Starter Web existente no projeto -->
-    <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-web</artifactId>
-    </dependency>
-
-    <!-- Integração OAuth2 Resource Server -->
+    <!-- Segurança e tokens JWT (inclui spring-boot-starter-security) -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
