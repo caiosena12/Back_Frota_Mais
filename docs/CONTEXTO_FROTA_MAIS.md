@@ -396,6 +396,12 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 | 28/10 | `631358f` | Testes de segurança e isolamento; ajustes no `pom.xml` |
 | 30/10 | (sem commit) | Relato: **5 testes, 0 falhas, BUILD SUCCESS** **[NÃO VERIFICADO]** |
 | 02/11 | `d0797b7` | Chave exclusiva de teste em `BackendApplicationTests` |
+| 02/11 | `fdeb23f` | `.gitignore` passa a ignorar `contexto-local/` |
+| 02/11 | `40f92ba`, `0b1fa02` | Este documento e o `CLAUDE.md` |
+| 02/11 | (sem commit) | Rotação do `JWT_SECRET` no Codespaces. Fluxo validado com a chave em uso; um token anterior à rotação **não foi testado** |
+| 02/11 | `f039e6a`, PR #1, merge `a4507bd` | `AutenticacaoFluxoRealTest`: 9 testes com o filtro real; a suíte passa a 14 testes |
+| 02/11 | `640e1e9`, PR #2, merge `bfd02ea` | Testes isolados em `frotamais_test`, com `GuardaBancoDeTeste`; a suíte passa a 17 testes |
+| 02/11 | `5461d6f`, `b090674`, branch `chore/base-confiavel` | Limpeza de dependências e causa da falha do `pom.xml` com CRLF. Sem PR até esta revisão |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -482,13 +488,57 @@ Testes na revisão original (5; hoje a suíte tem 17, seção 6.3): `BackendAppl
 - `spring-boot-starter-data-jpa-test` foi **mantido**: nenhum teste o usa hoje, mas ele traz 5 artefatos exclusivos e é necessário para usar `@DataJpaTest`.
 - O README ainda descreve a segurança como "planejada", fala em separação por usuário, não explica como rodar o projeto e usa outro slogan no rodapé.
 
-### 6.4 Não comprovado
+### 6.4 Comprovado e não comprovado
 
-- `GET /{id}`, `PUT` e `DELETE` no fluxo feliz; `400` de validação e `409` de placa duplicada pela API.
-- MOTORISTA com token real.
-- Token expirado, com assinatura de outra chave, `alg=none`, emissor errado, subject inválido, usuário desativado e `empresaId` divergente.
-- Corpo real das respostas de erro.
-- Schema real do banco de desenvolvimento.
+Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
+
+**Funcionalidades implementadas**
+
+- Registro de empresa com usuário DONO e login com JWT.
+- Validação do token e do usuário a cada requisição, com perfil lido do banco.
+- CRUD de caminhões com isolamento por empresa e escrita só para DONO.
+
+**Testes existentes**
+
+| Classe | Testes | O que cobre |
+|---|---|---|
+| `BackendApplicationTests` | 1 | Subida do contexto |
+| `SegurancaCaminhaoTest` | 3 | Sem token, token inválido e MOTORISTA simulado com `jwt()` |
+| `IsolamentoEmpresaCaminhaoTest` | 1 | Duas empresas com tokens reais: listagem, consulta, alteração e exclusão entre empresas |
+| `AutenticacaoFluxoRealTest` | 9 | Filtro real: login, tokens recusados, usuário desativado e perfil lido do banco |
+| `GuardaBancoDeTesteTest` | 3 | Banco efetivo da suíte e recusa de outro banco |
+
+**Alterações por PR**
+
+- **PR #1** (`f039e6a`): adicionou `AutenticacaoFluxoRealTest`, sem mudar o código da aplicação.
+- **PR #2** (`640e1e9`): isolou os testes em `frotamais_test`, adicionou o guarda, o rollback em `IsolamentoEmpresaCaminhaoTest` e os testes do guarda, sem mudar o código da aplicação.
+
+**Comprovado por teste automatizado**
+
+- `GET /{id}` no fluxo feliz, pela empresa dona do caminhão.
+- Token recusado: outra chave, expirado, emissor errado, `empresaId` divergente e usuário inexistente.
+- Usuário desativado perde o acesso com token já emitido e não consegue fazer login.
+- Login recusado por senha incorreta ou e-mail inexistente.
+- Usuário com perfil MOTORISTA no banco recebe `403` ao criar caminhão, mesmo com token que diz DONO.
+
+**Verificado manualmente, sem teste automatizado**
+
+- `alg=none`, assinatura adulterada e token forjado com a chave pública de teste: `401` no backend em execução.
+- Corpo do `400` de validação no login: `{"status":400,"detalhes":[...],"erro":"Dados inválidos"}`.
+- Tabelas `caminhoes`, `empresas` e `usuarios` e colunas de `usuarios` no banco de desenvolvimento.
+
+**Ainda não comprovado**
+
+- `PUT` e `DELETE` no fluxo feliz; `400` de validação e `409` de placa duplicada em caminhões.
+- Subject não numérico no token.
+- Corpo real das respostas `401`, `403`, `404` e `409`.
+- Restrições e índices reais do banco de desenvolvimento.
+- Que a chave anterior à rotação foi recusada: falta testar um token antigo.
+
+**Pendências abertas**
+
+- Aprovar e aplicar a remoção do byte inicial do `pom.xml` (seção 6.3).
+- Decisões do Anexo A e etapas seguintes do roadmap (seção 6.6).
 
 ### 6.5 Status das frentes
 
