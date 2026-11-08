@@ -35,8 +35,11 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
     Optional<Long> caminhaoDaViagem(@Param("id") Long id, @Param("empresaId") Long empresaId);
 
     /**
-     * Existe outra viagem do mesmo caminhão cujo período cruza [inicio, fim]?
-     * Intervalos de datas inclusivos: compartilhar um dia já é sobreposição.
+     * Existe outra viagem do mesmo caminhão em conflito com o período [inicio, fim]?
+     * Há conflito se as duas começam no mesmo dia, ou se uma começa antes do
+     * fim da outra e termina depois do início dela. Assim, a única data que
+     * duas viagens podem compartilhar é o dia em que uma termina e a outra
+     * começa (descarga do frete e saída vazia para o próximo).
      * fim nulo = período aberto (viagem em andamento), sem limite superior;
      * o mesmo vale para as viagens existentes com dataFim nula.
      */
@@ -45,8 +48,9 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             where v.empresa.id = :empresaId
               and v.caminhao.id = :caminhaoId
               and (:ignorarId is null or v.id <> :ignorarId)
-              and (cast(:fim as date) is null or v.dataInicio <= :fim)
-              and (v.dataFim is null or v.dataFim >= :inicio)
+              and (v.dataInicio = :inicio
+                   or ((cast(:fim as date) is null or v.dataInicio < :fim)
+                       and (v.dataFim is null or v.dataFim > :inicio)))
             """)
     boolean existeSobreposicao(
             @Param("empresaId") Long empresaId,

@@ -11,6 +11,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * Regressão A1 da auditoria: duas viagens do mesmo caminhão não podem ter
  * períodos sobrepostos. Datas inclusivas; viagem em andamento tem período aberto.
+ * Única data compartilhável: o dia em que uma viagem termina e a seguinte
+ * começa (P19: descarga e saída vazia para o próximo frete no mesmo dia).
  * O odômetro NÃO precisa ser contínuo entre fretes (o motorista zera os contadores).
  */
 class SobreposicaoViagemTest extends ApiViagemTeste {
@@ -51,13 +53,16 @@ class SobreposicaoViagemTest extends ApiViagemTeste {
         sobreposicao(moverDatas(z, "2025-03-03", "2025-03-08", 409));   // dentro da outra
         sobreposicao(moverDatas(z, "2025-02-20", "2025-03-25", 409));   // contém a outra
         sobreposicao(moverDatas(z, "2025-03-08", "2025-03-20", 409));   // parcial
-        sobreposicao(moverDatas(z, "2025-03-10", "2025-03-20", 409));   // compartilha um dia
+        sobreposicao(moverDatas(z, "2025-03-09", "2025-03-20", 409));   // compartilha dois dias
+        sobreposicao(moverDatas(z, "2025-03-01", "2025-03-01", 409));   // começa no mesmo dia
 
         // A recusa não altera nada.
         assertEquals("2025-03-15", buscarViagem(token, z).get("dataInicio").asString());
 
-        // Sem sobreposição: aceito, inclusive no dia seguinte ao fim da outra.
+        // Sem sobreposição: aceito no dia seguinte ao fim da outra...
         moverDatas(z, "2025-03-11", "2025-03-20", 200);
+        // ...e no próprio dia em que a outra termina (única data compartilhável).
+        moverDatas(z, "2025-03-10", "2025-03-20", 200);
     }
 
     @Test
@@ -66,13 +71,15 @@ class SobreposicaoViagemTest extends ApiViagemTeste {
         finalizada("2025-03-15", "2025-03-20");
 
         // Uma viagem nova está em andamento: período aberto, então cruza qualquer viagem posterior.
-        for (String inicio : new String[] {"2025-03-05", "2025-03-10", "2025-03-12", "2025-02-01", "2025-03-20"}) {
+        for (String inicio : new String[] {"2025-03-05", "2025-03-10", "2025-03-12", "2025-02-01", "2025-03-15",
+                "2025-03-19"}) {
             sobreposicao(chamar(POST(VIAGENS), token, corpo("caminhaoId", caminhaoId, "dataInicio", inicio,
                     "kmInicialVazio", 0), 409));
         }
         assertEquals(2, chamar(GET(VIAGENS), token, null, 200).size());
 
-        criarViagem(token, corpo("caminhaoId", caminhaoId, "dataInicio", "2025-03-21", "kmInicialVazio", 0));
+        // Pode começar no dia em que a última termina.
+        criarViagem(token, corpo("caminhaoId", caminhaoId, "dataInicio", "2025-03-20", "kmInicialVazio", 0));
     }
 
     @Test
@@ -82,9 +89,9 @@ class SobreposicaoViagemTest extends ApiViagemTeste {
                 "origem", "A", "destino", "B", "valorFrete", "1000.00", "kmInicialCarregado", 0));
 
         // Estender a antiga para depois do início da aberta cruza o período aberto.
-        sobreposicao(moverDatas(antiga, "2025-03-01", "2025-03-10", 409));
+        sobreposicao(moverDatas(antiga, "2025-03-01", "2025-03-11", 409));
         sobreposicao(moverDatas(antiga, "2025-03-01", "2025-04-30", 409));
-        moverDatas(antiga, "2025-03-01", "2025-03-09", 200);
+        moverDatas(antiga, "2025-03-01", "2025-03-10", 200);   // termina no dia em que a aberta começa
 
         // Mover o início da aberta para dentro da antiga também é recusado.
         sobreposicao(chamar(PUT(VIAGENS + "/" + aberta), token, corpo("dataInicio", "2025-03-09",

@@ -183,14 +183,17 @@ public class ViagemService {
 
     /**
      * Um caminhão não pode ter duas viagens com períodos sobrepostos. Datas
-     * inclusivas; viagem sem data final tem período aberto. Deve ser chamado com
-     * o caminhão já bloqueado.
+     * inclusivas, com uma única exceção: uma viagem pode começar no dia em que
+     * a anterior termina (descarga e saída vazia para o próximo frete no mesmo
+     * dia). Duas viagens não podem começar no mesmo dia. Viagem sem data final
+     * tem período aberto. Deve ser chamado com o caminhão já bloqueado.
      */
     private void exigirSemSobreposicao(Long empresaId, Long caminhaoId, Estado estado, Long ignorarId) {
         if (viagens.existeSobreposicao(empresaId, caminhaoId, estado.dataInicio(), estado.dataFim(), ignorarId)) {
             throw RegraNegocioException.conflito(
                     "O período desta viagem se sobrepõe ao de outra viagem do mesmo caminhão."
-                    + " Datas são inclusivas: duas viagens do caminhão não podem compartilhar um dia.");
+                    + " Duas viagens do caminhão só podem compartilhar o dia em que uma termina e a outra"
+                    + " começa, e não podem começar no mesmo dia.");
         }
     }
 
