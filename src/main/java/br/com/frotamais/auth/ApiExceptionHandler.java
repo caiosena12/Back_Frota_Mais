@@ -10,6 +10,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import br.com.frotamais.comum.RegraNegocioException;
+
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
@@ -34,5 +36,21 @@ public class ApiExceptionHandler {
                 "status", 409,
                 "erro", "Conflito de dados",
                 "mensagem", "Um dado viola uma regra de integridade ou já existe."));
+    }
+
+    @ExceptionHandler(RegraNegocioException.class)
+    public ResponseEntity<Map<String, Object>> tratarRegraNegocio(
+            RegraNegocioException ex) {
+        HttpStatus status = ex.getStatus();
+        String erro = switch (status) {
+            case BAD_REQUEST -> "Dados inválidos";
+            case NOT_FOUND -> "Não encontrado";
+            case CONFLICT -> "Conflito de dados";
+            default -> status.getReasonPhrase();
+        };
+        return ResponseEntity.status(status).body(Map.of(
+                "status", status.value(),
+                "erro", erro,
+                "detalhes", List.of(ex.getMessage())));
     }
 }
