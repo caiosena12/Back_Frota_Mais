@@ -17,6 +17,8 @@ import java.util.List;
  *   eles só definem o preço. Somá-los causaria dupla contagem.
  * - Arla, pedágios e despesas extras entram pelo valor pago.
  * - Sem referência de preço, o custo do diesel fica nulo: nada é inventado.
+ * - Preço médio ou consumo fora dos LimitesPlausibilidade: o custo afetado fica
+ *   nulo e o motivo vai para as pendências. Nunca vira zero.
  * - Valores em dinheiro com 2 casas (HALF_UP), arredondados só no fim.
  */
 public final class CalculadoraRentabilidade {
@@ -41,9 +43,20 @@ public final class CalculadoraRentabilidade {
             BigDecimal despesasExtras) {
     }
 
-    public static RentabilidadeResponse calcular(Entrada e) {
+    public static RentabilidadeResponse calcular(Entrada e, LimitesPlausibilidade limites) {
         List<String> pendencias = new ArrayList<>();
         PrecoDiesel preco = e.precoDiesel() != null ? e.precoDiesel() : PrecoDiesel.semReferencia();
+
+        boolean precoUtilizavel = preco.disponivel();
+        if (preco.disponivel()) {
+            BigDecimal exato = preco.totalPago().divide(preco.totalLitros(), PRECISAO);
+            if (!limites.precoValido(exato)) {
+                precoUtilizavel = false;
+                pendencias.add("Preço médio do diesel (R$ " + LimitesPlausibilidade.br(exato)
+                        + " por litro) fora do limite de plausibilidade (" + limites.faixaPreco()
+                        + "). O custo do diesel não foi calculado.");
+            }
+        }
 
         BigDecimal receita = e.valorFrete();
         if (receita == null) {
@@ -59,10 +72,10 @@ public final class CalculadoraRentabilidade {
             pendencias.add("Quilometragem final do percurso carregado não informada.");
         }
 
-        Percurso vazio = percurso(kmVazio, e.consumoMedioVazio(), preco,
-                "Consumo médio vazio não informado.", pendencias);
-        Percurso carregado = percurso(kmCarregado, e.consumoMedioCarregado(), preco,
-                "Consumo médio carregado não informado.", pendencias);
+        Percurso vazio = percurso(kmVazio, e.consumoMedioVazio(), preco, precoUtilizavel, limites,
+                "vazio", pendencias);
+        Percurso carregado = percurso(kmCarregado, e.consumoMedioCarregado(), preco, precoUtilizavel, limites,
+                "carregado", pendencias);
 
         if (!preco.disponivel() && (precisaDePreco(kmVazio) || precisaDePreco(kmCarregado))) {
             pendencias.add("Sem referência de preço do diesel: não há abastecimento de diesel nesta"
@@ -136,8 +149,8 @@ public final class CalculadoraRentabilidade {
     private record Percurso(BigDecimal litros, BigDecimal custo) {
     }
 
-    private static Percurso percurso(Integer km, BigDecimal consumo, PrecoDiesel preco,
-            String faltaConsumo, List<String> pendencias) {
+    private static Percurso percurso(Integer km, BigDecimal consumo, PrecoDiesel preco, boolean precoUtilizavel,
+            LimitesPlausibilidade limites, String nome, List<String> pendencias) {
         if (km == null) {
             return new Percurso(null, null);
         }
@@ -145,12 +158,18 @@ public final class CalculadoraRentabilidade {
             return new Percurso(BigDecimal.ZERO.setScale(3), ZERO);
         }
         if (consumo == null || consumo.signum() <= 0) {
-            pendencias.add(faltaConsumo);
+            pendencias.add("Consumo médio " + nome + " não informado.");
+            return new Percurso(null, null);
+        }
+        if (!limites.consumoValido(consumo)) {
+            pendencias.add("Consumo médio " + nome + " (" + LimitesPlausibilidade.br(consumo)
+                    + " km/L) fora do limite de plausibilidade (" + limites.faixaConsumo()
+                    + "). O custo deste percurso não foi calculado.");
             return new Percurso(null, null);
         }
         BigDecimal kmDecimal = BigDecimal.valueOf(km);
         BigDecimal litros = kmDecimal.divide(consumo, PRECISAO).setScale(3, RoundingMode.HALF_UP);
-        if (!preco.disponivel()) {
+        if (!precoUtilizavel) {
             return new Percurso(litros, null);
         }
         // km × total pago ÷ (consumo × litros abastecidos): uma única divisão.

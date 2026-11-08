@@ -14,6 +14,10 @@ import br.com.frotamais.viagem.CalculadoraRentabilidade.Entrada;
 /** Teste unitário puro: não sobe Spring nem acessa banco. */
 class CalculadoraRentabilidadeTest {
 
+    /** Os mesmos limites padrão de application.properties. */
+    static final LimitesPlausibilidade LIMITES = new LimitesPlausibilidade(
+            new BigDecimal("1.00"), new BigDecimal("30.00"), new BigDecimal("0.50"), new BigDecimal("10.00"));
+
     private static BigDecimal d(String valor) {
         return new BigDecimal(valor);
     }
@@ -35,7 +39,7 @@ class CalculadoraRentabilidadeTest {
 
     @Test
     void calculaConsumoECustoSeparadosParaVazioECarregado() {
-        RentabilidadeResponse r = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), d("80.00")));
+        RentabilidadeResponse r = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), d("80.00")), LIMITES);
 
         assertEquals(100, r.kmVazio());
         assertEquals(500, r.kmCarregado());
@@ -58,15 +62,15 @@ class CalculadoraRentabilidadeTest {
     @Test
     void valorPagoNoDieselNaoEntraComoCustoDiretamente() {
         // Os abastecimentos somam R$ 1.860,00, mas o custo do diesel é o estimado pelo consumo.
-        RentabilidadeResponse r = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), null));
+        RentabilidadeResponse r = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), null), LIMITES);
         igual("1433.75", r.custoDieselVazio().add(r.custoDieselCarregado()));
         igual("1561.55", r.custoOperacionalTotal());
     }
 
     @Test
     void arlaEOpcionalENaoAlteraODiesel() {
-        RentabilidadeResponse semArla = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), null));
-        RentabilidadeResponse comArla = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), d("80.00")));
+        RentabilidadeResponse semArla = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), null), LIMITES);
+        RentabilidadeResponse comArla = CalculadoraRentabilidade.calcular(frete2(precoDaViagem(), d("80.00")), LIMITES);
 
         igual("0.00", semArla.custoArla());
         assertTrue(semArla.calculoCompleto());
@@ -78,7 +82,7 @@ class CalculadoraRentabilidadeTest {
     @Test
     void semDeslocamentoVazioNaoHaCustoVazioNemExigeConsumoVazio() {
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(new Entrada(
-                d("2000.00"), null, 5000, 5400, null, d("2.50"), precoDaViagem(), null, null, null));
+                d("2000.00"), null, 5000, 5400, null, d("2.50"), precoDaViagem(), null, null, null), LIMITES);
 
         assertEquals(0, r.kmVazio());
         igual("0.00", r.custoDieselVazio());
@@ -90,7 +94,7 @@ class CalculadoraRentabilidadeTest {
     @Test
     void semReferenciaDePrecoNaoInventaCusto() {
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(
-                frete2(PrecoDiesel.semReferencia(), d("80.00")));
+                frete2(PrecoDiesel.semReferencia(), d("80.00")), LIMITES);
 
         assertEquals(OrigemPrecoDiesel.SEM_REFERENCIA, r.origemPrecoDiesel());
         assertNull(r.precoMedioDiesel());
@@ -108,7 +112,7 @@ class CalculadoraRentabilidadeTest {
     @Test
     void viagemEmAndamentoTemCalculoIncompleto() {
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(new Entrada(
-                null, 1000, null, null, null, null, precoDaViagem(), null, d("10.00"), null));
+                null, 1000, null, null, null, null, precoDaViagem(), null, d("10.00"), null), LIMITES);
 
         assertNull(r.kmVazio());
         assertNull(r.kmCarregado());
@@ -121,7 +125,7 @@ class CalculadoraRentabilidadeTest {
     @Test
     void consumoNaoInformadoDeixaCustoDoPercursoNulo() {
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(new Entrada(
-                d("3500.00"), 1000, 1100, 1600, null, d("2.50"), precoDaViagem(), null, null, null));
+                d("3500.00"), 1000, 1100, 1600, null, d("2.50"), precoDaViagem(), null, null, null), LIMITES);
 
         assertNull(r.custoDieselVazio());
         igual("1240.00", r.custoDieselCarregado());
@@ -136,7 +140,7 @@ class CalculadoraRentabilidadeTest {
         PrecoDiesel preco = new PrecoDiesel(d("1234.56"), d("201.700"),
                 OrigemPrecoDiesel.ABASTECIMENTOS_DA_VIAGEM, 1L);
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(new Entrada(
-                d("20000.00"), null, 10000, 15000, null, d("2.37"), preco, null, null, null));
+                d("20000.00"), null, 10000, 15000, null, d("2.37"), preco, null, null, null), LIMITES);
 
         igual("12913.02", r.custoDieselCarregado());
         igual("6.1208", r.precoMedioDiesel());
@@ -145,10 +149,77 @@ class CalculadoraRentabilidadeTest {
     @Test
     void prejuizoTemLucroEMargemNegativos() {
         RentabilidadeResponse r = CalculadoraRentabilidade.calcular(new Entrada(
-                d("1000.00"), null, 0, 400, null, d("2.00"), precoDaViagem(), null, null, null));
+                d("1000.00"), null, 0, 400, null, d("2.00"), precoDaViagem(), null, null, null), LIMITES);
 
         igual("1240.00", r.custoOperacionalTotal());   // 200 L × 6,20
         igual("-240.00", r.lucro());
         igual("-24.00", r.margemPercentual());
+    }
+
+    // ---- Limites de plausibilidade (regressão B1 da auditoria) ----
+
+    private static PrecoDiesel preco(String pago, String litros) {
+        return new PrecoDiesel(d(pago), d(litros), OrigemPrecoDiesel.ABASTECIMENTOS_DA_VIAGEM, 1L);
+    }
+
+    private static RentabilidadeResponse carregado(PrecoDiesel preco, String consumo) {
+        return CalculadoraRentabilidade.calcular(new Entrada(
+                d("1000.00"), null, 0, 400, null, d(consumo), preco, null, null, null), LIMITES);
+    }
+
+    @Test
+    void cenarioDaAuditoriaPrecoIrrisorioNaoGeraLucroArtificial() {
+        // 9.999.999,999 L por R$ 0,01: antes dava custo 0 e margem 100% com cálculo "completo".
+        RentabilidadeResponse r = carregado(preco("0.01", "9999999.999"), "2.50");
+        assertNull(r.custoDieselCarregado());
+        assertNull(r.custoOperacionalTotal());
+        assertNull(r.lucro());
+        assertNull(r.margemPercentual());
+        assertFalse(r.calculoCompleto());
+        assertTrue(r.pendencias().get(0).contains("fora do limite"), r.pendencias()::toString);
+
+        RentabilidadeResponse centavo = carregado(preco("1.00", "100"), "2.50");   // R$ 0,01/L
+        assertFalse(centavo.calculoCompleto());
+        assertNull(centavo.lucro());
+    }
+
+    @Test
+    void consumoImplausivelNaoGeraCustoZero() {
+        RentabilidadeResponse r = carregado(precoDaViagem(), "99.99");
+        assertNull(r.custoDieselCarregado());
+        assertNull(r.litrosEstimadosCarregado());
+        assertNull(r.lucro());
+        assertFalse(r.calculoCompleto());
+        assertTrue(r.pendencias().get(0).contains("Consumo médio carregado (99,99 km/L)"), r.pendencias()::toString);
+    }
+
+    @Test
+    void limitesSaoInclusivos() {
+        assertTrue(carregado(preco("100.00", "100"), "2.50").calculoCompleto());    // R$ 1,00/L
+        assertTrue(carregado(preco("3000.00", "100"), "2.50").calculoCompleto());   // R$ 30,00/L
+        assertTrue(carregado(precoDaViagem(), "0.50").calculoCompleto());
+        assertTrue(carregado(precoDaViagem(), "10.00").calculoCompleto());
+        igual("4960.00", carregado(precoDaViagem(), "0.50").custoDieselCarregado());   // 800 L × 6,20
+
+        assertFalse(carregado(preco("99.99", "100"), "2.50").calculoCompleto());    // R$ 0,9999/L
+        assertFalse(carregado(preco("3000.01", "100"), "2.50").calculoCompleto());  // R$ 30,0001/L
+        assertFalse(carregado(precoDaViagem(), "0.49").calculoCompleto());
+        assertFalse(carregado(precoDaViagem(), "10.01").calculoCompleto());
+    }
+
+    @Test
+    void semReferenciaContinuaIncompletaSemInventarPreco() {
+        RentabilidadeResponse r = carregado(PrecoDiesel.semReferencia(), "2.50");
+        assertNull(r.precoMedioDiesel());
+        assertNull(r.custoDieselCarregado());
+        assertFalse(r.calculoCompleto());
+    }
+
+    @Test
+    void configuracaoComMinimoMaiorOuIgualAoMaximoERecusada() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new LimitesPlausibilidade(
+                d("30.00"), d("1.00"), d("0.50"), d("10.00")));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new LimitesPlausibilidade(
+                d("1.00"), d("30.00"), d("5.00"), d("5.00")));
     }
 }

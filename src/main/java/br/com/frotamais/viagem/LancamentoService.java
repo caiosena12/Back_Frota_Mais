@@ -1,5 +1,7 @@
 package br.com.frotamais.viagem;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 
 import org.springframework.stereotype.Service;
@@ -28,9 +30,12 @@ public class LancamentoService {
     private final DespesaRepository despesas;
     private final UsuarioRepository usuarios;
     private final UsuarioLogado logado;
+    private final LimitesPlausibilidade limites;
 
     public LancamentoService(ViagemService viagens, AbastecimentoRepository abastecimentos,
-            DespesaRepository despesas, UsuarioRepository usuarios, UsuarioLogado logado) {
+            DespesaRepository despesas, UsuarioRepository usuarios, UsuarioLogado logado,
+            LimitesPlausibilidade limites) {
+        this.limites = limites;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
@@ -42,6 +47,7 @@ public class LancamentoService {
 
     public AbastecimentoResponse adicionarAbastecimento(Long viagemId, AbastecimentoRequest req) {
         Viagem v = viagemParaLancar(viagemId, req.data());
+        validarAbastecimento(v, req);
         Abastecimento a = new Abastecimento();
         a.setViagem(v);
         a.setCriadoPor(usuarios.getReferenceById(logado.usuarioId()));
@@ -51,6 +57,7 @@ public class LancamentoService {
 
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
         Viagem v = viagemParaLancar(viagemId, req.data());
+        validarAbastecimento(v, req);
         Abastecimento a = abastecimento(v, id);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
         preencher(a, req);
@@ -128,6 +135,29 @@ public class LancamentoService {
         }
         v.marcarAlteracao();
         return v;
+    }
+
+    /**
+     * Diesel: preço por litro dentro dos limites de plausibilidade e, se o
+     * caminhão tiver capacidade do tanque cadastrada, litros até essa capacidade.
+     * Sem capacidade cadastrada não há limite de litros. Arla tem tanque próprio
+     * e não é limitado pela capacidade do tanque de diesel.
+     */
+    private void validarAbastecimento(Viagem v, AbastecimentoRequest req) {
+        if (req.tipo() != TipoCombustivel.DIESEL) {
+            return;
+        }
+        BigDecimal precoLitro = req.valorTotal().divide(req.litros(), MathContext.DECIMAL128);
+        if (!limites.precoValido(precoLitro)) {
+            throw RegraNegocioException.invalido("Preço do diesel fora do limite de plausibilidade (R$ "
+                    + LimitesPlausibilidade.br(precoLitro) + " por litro). Informe de " + limites.faixaPreco()
+                    + "; confira se litros e valor não foram trocados.");
+        }
+        Integer capacidade = v.getCaminhao().getCapacidadeTanqueLitros();
+        if (capacidade != null && req.litros().compareTo(BigDecimal.valueOf(capacidade)) > 0) {
+            throw RegraNegocioException.invalido("Os litros abastecidos ultrapassam a capacidade do tanque do"
+                    + " caminhão (" + capacidade + " L).");
+        }
     }
 
     private Viagem viagemParaExcluir(Long viagemId) {

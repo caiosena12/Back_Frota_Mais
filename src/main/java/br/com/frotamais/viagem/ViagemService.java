@@ -40,10 +40,13 @@ public class ViagemService {
     private final UsuarioRepository usuarios;
     private final UsuarioLogado logado;
     private final RentabilidadeService rentabilidade;
+    private final LimitesPlausibilidade limites;
 
     public ViagemService(ViagemRepository viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, CaminhaoRepository caminhoes, EmpresaRepository empresas,
-            UsuarioRepository usuarios, UsuarioLogado logado, RentabilidadeService rentabilidade) {
+            UsuarioRepository usuarios, UsuarioLogado logado, RentabilidadeService rentabilidade,
+            LimitesPlausibilidade limites) {
+        this.limites = limites;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
@@ -85,7 +88,7 @@ public class ViagemService {
         Estado estado = new Estado(req.dataInicio(), null, req.valorFrete(), texto(req.origem()),
                 texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
-        estado.validarCoerencia();
+        estado.validarCoerencia(limites);
         exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
 
         Viagem v = new Viagem();
@@ -112,7 +115,7 @@ public class ViagemService {
                 req.kmInicialVazio(), req.kmInicialCarregado(),
                 v.isFinalizada() ? req.kmFinalCarregado() : null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
-        estado.validarCoerencia();
+        estado.validarCoerencia(limites);
         if (v.isFinalizada()) {
             // Correção de viagem finalizada: ela precisa continuar completa e coerente.
             estado.validarCompleta();
@@ -140,7 +143,7 @@ public class ViagemService {
                 v.getDestino(), v.getKmInicialVazio(), v.getKmInicialCarregado(), req.kmFinalCarregado(),
                 req.consumoMedioVazio() != null ? req.consumoMedioVazio() : v.getConsumoMedioVazio(),
                 req.consumoMedioCarregado() != null ? req.consumoMedioCarregado() : v.getConsumoMedioCarregado());
-        estado.validarCoerencia();
+        estado.validarCoerencia(limites);
         estado.validarCompleta();
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
@@ -239,7 +242,7 @@ public class ViagemService {
             BigDecimal consumoMedioCarregado) {
 
         /** Coerência das datas e da quilometragem, em qualquer estado da viagem. */
-        void validarCoerencia() {
+        void validarCoerencia(LimitesPlausibilidade limites) {
             if (dataInicio.isAfter(hoje())) {
                 throw RegraNegocioException.invalido("A data de início não pode estar no futuro.");
             }
@@ -271,6 +274,15 @@ public class ViagemService {
             }
             if (kmInicialVazio == null && consumoMedioVazio != null) {
                 throw RegraNegocioException.invalido("Consumo médio vazio informado sem deslocamento vazio.");
+            }
+            exigirConsumoPlausivel(consumoMedioVazio, "vazio", limites);
+            exigirConsumoPlausivel(consumoMedioCarregado, "carregado", limites);
+        }
+
+        private static void exigirConsumoPlausivel(BigDecimal consumo, String nome, LimitesPlausibilidade limites) {
+            if (consumo != null && !limites.consumoValido(consumo)) {
+                throw RegraNegocioException.invalido("Consumo médio " + nome + " fora do limite de plausibilidade: "
+                        + "informe de " + limites.faixaConsumo() + ".");
             }
         }
 

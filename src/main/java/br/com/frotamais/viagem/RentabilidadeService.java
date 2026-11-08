@@ -1,6 +1,7 @@
 package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -26,10 +27,13 @@ public class RentabilidadeService {
 
     private final AbastecimentoRepository abastecimentos;
     private final DespesaRepository despesas;
+    private final LimitesPlausibilidade limites;
 
-    public RentabilidadeService(AbastecimentoRepository abastecimentos, DespesaRepository despesas) {
+    public RentabilidadeService(AbastecimentoRepository abastecimentos, DespesaRepository despesas,
+            LimitesPlausibilidade limites) {
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
+        this.limites = limites;
     }
 
     public RentabilidadeResponse calcular(Long empresaId, Viagem viagem) {
@@ -61,7 +65,7 @@ public class RentabilidadeService {
         for (Viagem v : viagens) {
             Map<Enum<?>, BigDecimal> daViagem = totais.getOrDefault(v.getId(), Map.of());
             PrecoDiesel preco = v.referenciaConsolidada() != null ? v.referenciaConsolidada()
-                    : resolverPreco(v, dieselPorCaminhao.getOrDefault(v.getCaminhao().getId(), List.of()));
+                    : resolverPreco(v, dieselPorCaminhao.getOrDefault(v.getCaminhao().getId(), List.of()), limites);
             resultado.put(v.getId(), CalculadoraRentabilidade.calcular(new CalculadoraRentabilidade.Entrada(
                     v.getValorFrete(),
                     v.getKmInicialVazio(),
@@ -72,7 +76,7 @@ public class RentabilidadeService {
                     preco,
                     daViagem.get(TipoCombustivel.ARLA),
                     daViagem.get(TipoDespesa.PEDAGIO),
-                    daViagem.get(TipoDespesa.EXTRA))));
+                    daViagem.get(TipoDespesa.EXTRA)), limites));
         }
         return resultado;
     }
@@ -83,17 +87,21 @@ public class RentabilidadeService {
      */
     public PrecoDiesel precoAtual(Long empresaId, Viagem viagem) {
         Long caminhaoId = viagem.getCaminhao().getId();
-        return resolverPreco(viagem, abastecimentos.totaisDieselPorViagem(empresaId, Set.of(caminhaoId)));
+        return resolverPreco(viagem, abastecimentos.totaisDieselPorViagem(empresaId, Set.of(caminhaoId)), limites);
     }
 
     /**
      * Preço do diesel da viagem:
      * 1. média ponderada dos abastecimentos de diesel da própria viagem;
      * 2. senão, a da viagem anterior mais recente do mesmo caminhão que teve diesel
-     *    ("anterior" pela data de início e, no empate, pelo id);
+     *    com preço médio dentro dos limites de plausibilidade ("anterior" pela data
+     *    de início e, no empate, pelo id). Referências implausíveis são puladas;
+     *    o preço da própria viagem nunca é trocado: se implausível, o cálculo fica
+     *    incompleto;
      * 3. senão, sem referência.
      */
-    static PrecoDiesel resolverPreco(Viagem viagem, List<TotaisDiesel> historicoDoCaminhao) {
+    static PrecoDiesel resolverPreco(Viagem viagem, List<TotaisDiesel> historicoDoCaminhao,
+            LimitesPlausibilidade limites) {
         TotaisDiesel atual = new TotaisDiesel(viagem.getId(), null, viagem.getDataInicio(), null, null);
 
         for (TotaisDiesel t : historicoDoCaminhao) {
@@ -104,6 +112,7 @@ public class RentabilidadeService {
         }
         return historicoDoCaminhao.stream()
                 .filter(t -> ORDEM.compare(t, atual) < 0)
+                .filter(t -> limites.precoValido(t.valorPago().divide(t.litros(), MathContext.DECIMAL128)))
                 .max(ORDEM)
                 .map(t -> new PrecoDiesel(t.valorPago(), t.litros(),
                         OrigemPrecoDiesel.ULTIMO_PRECO_DO_CAMINHAO, t.viagemId()))
