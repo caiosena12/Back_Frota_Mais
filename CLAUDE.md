@@ -63,6 +63,14 @@ Monólito Spring Boot 4.1.1 na raiz do repositório, com pacotes por funcionalid
 
 **Viagens (`viagem/`):** cada frete é uma viagem, com deslocamento vazio opcional atribuído a ele. As fórmulas financeiras ficam só em `CalculadoraRentabilidade`, uma função pura testada sem banco. Não some os valores pagos no diesel como custo: eles só definem o preço médio. Sem referência de preço, o custo fica nulo, nunca zero. O MOTORISTA recebe `403` em todas as rotas até existir o vínculo motorista–caminhão; não libere antes disso. Detalhes em `docs/CONTEXTO_FROTA_MAIS.md`, seção 4.9.
 
+Invariantes que não podem ser quebrados:
+- **Períodos:** duas viagens do mesmo caminhão não se sobrepõem (datas inclusivas; em andamento = período aberto), e a checagem roda com o caminhão bloqueado.
+- **Ordem de bloqueio:** sempre caminhão → viagem.
+- **Referência congelada:** frete finalizado usa a referência de preço gravada na finalização, e só uma correção explícita dele recalcula (`ViagemService.consolidarReferencia`). Nunca recalcule outros fretes finalizados.
+- **Plausibilidade:** os limites ficam em `app.viagens.limites.*` (`LimitesPlausibilidade`). Não espalhe constantes pelo código.
+- **Viagem finalizada:** não aceita `POST` nem `DELETE` de lançamento.
+- **Caminhão:** com viagem aberta não é inativado; com histórico não é excluído.
+
 **Spring Boot 4:** Jackson é 3.x (`tools.jackson.databind`), `@AutoConfigureMockMvc` fica em `org.springframework.boot.webmvc.test.autoconfigure` e `include-message` é `spring.web.error.*`. Não troque imports por memória do Boot 3.
 
 **Testes:** `jwt()` do `spring-security-test` contorna o `conversor()`. Um teste com ele prova o `@PreAuthorize`, não o fluxo real.
