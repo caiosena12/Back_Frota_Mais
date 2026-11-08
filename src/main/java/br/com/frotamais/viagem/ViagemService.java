@@ -122,6 +122,10 @@ public class ViagemService {
 
         estado.aplicar(v);
         v.marcarAlteracao();
+        if (v.isFinalizada()) {
+            // Correção explícita de um frete finalizado: recalcula a referência só dele.
+            consolidarReferencia(empresaId, v);
+        }
         return detalhar(empresaId, v);
     }
 
@@ -145,7 +149,17 @@ public class ViagemService {
         v.setStatus(StatusViagem.FINALIZADA);
         v.setFinalizadaEm(Instant.now());
         v.marcarAlteracao();
+        consolidarReferencia(empresaId, v);
         return detalhar(empresaId, v);
+    }
+
+    /**
+     * Congela no frete a referência de preço do diesel calculada agora. Afeta
+     * apenas esta viagem: nenhum outro frete finalizado é recalculado.
+     */
+    void consolidarReferencia(Long empresaId, Viagem v) {
+        viagens.flush();
+        v.consolidarReferencia(rentabilidade.precoAtual(empresaId, v), Instant.now());
     }
 
     /** Busca com bloqueio de escrita; usada por toda operação que altera a viagem ou seus lançamentos. */

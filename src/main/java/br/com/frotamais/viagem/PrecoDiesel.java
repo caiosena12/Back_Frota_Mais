@@ -3,6 +3,7 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.time.Instant;
 
 /**
  * Referência de preço do diesel de uma viagem: os totais (litros e valor pago)
@@ -15,10 +16,16 @@ public record PrecoDiesel(
         BigDecimal totalPago,
         BigDecimal totalLitros,
         OrigemPrecoDiesel origem,
-        Long viagemReferenciaId) {
+        Long viagemReferenciaId,
+        Instant consolidadaEm) {
+
+    /** Referência calculada na hora (ainda não consolidada). */
+    public PrecoDiesel(BigDecimal totalPago, BigDecimal totalLitros, OrigemPrecoDiesel origem, Long viagemReferenciaId) {
+        this(totalPago, totalLitros, origem, viagemReferenciaId, null);
+    }
 
     public static PrecoDiesel semReferencia() {
-        return new PrecoDiesel(null, null, OrigemPrecoDiesel.SEM_REFERENCIA, null);
+        return new PrecoDiesel(null, null, OrigemPrecoDiesel.SEM_REFERENCIA, null, null);
     }
 
     public boolean disponivel() {

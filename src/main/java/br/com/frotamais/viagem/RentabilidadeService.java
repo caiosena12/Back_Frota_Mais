@@ -44,11 +44,15 @@ public class RentabilidadeService {
         }
 
         Set<Long> viagemIds = viagens.stream().map(Viagem::getId).collect(Collectors.toSet());
-        Set<Long> caminhaoIds = viagens.stream().map(v -> v.getCaminhao().getId()).collect(Collectors.toSet());
 
-        Map<Long, List<TotaisDiesel>> dieselPorCaminhao = abastecimentos
-                .totaisDieselPorViagem(empresaId, caminhaoIds).stream()
-                .collect(Collectors.groupingBy(TotaisDiesel::caminhaoId));
+        // O histórico de outras viagens só é consultado para viagens sem referência consolidada.
+        Set<Long> caminhoesSemReferencia = viagens.stream()
+                .filter(v -> v.referenciaConsolidada() == null)
+                .map(v -> v.getCaminhao().getId())
+                .collect(Collectors.toSet());
+        Map<Long, List<TotaisDiesel>> dieselPorCaminhao = caminhoesSemReferencia.isEmpty() ? Map.of()
+                : abastecimentos.totaisDieselPorViagem(empresaId, caminhoesSemReferencia).stream()
+                        .collect(Collectors.groupingBy(TotaisDiesel::caminhaoId));
 
         Map<Long, Map<Enum<?>, BigDecimal>> totais = new HashMap<>();
         abastecimentos.totaisPorViagem(empresaId, viagemIds).forEach(t -> acumular(totais, t));
@@ -56,8 +60,8 @@ public class RentabilidadeService {
 
         for (Viagem v : viagens) {
             Map<Enum<?>, BigDecimal> daViagem = totais.getOrDefault(v.getId(), Map.of());
-            PrecoDiesel preco = resolverPreco(v,
-                    dieselPorCaminhao.getOrDefault(v.getCaminhao().getId(), List.of()));
+            PrecoDiesel preco = v.referenciaConsolidada() != null ? v.referenciaConsolidada()
+                    : resolverPreco(v, dieselPorCaminhao.getOrDefault(v.getCaminhao().getId(), List.of()));
             resultado.put(v.getId(), CalculadoraRentabilidade.calcular(new CalculadoraRentabilidade.Entrada(
                     v.getValorFrete(),
                     v.getKmInicialVazio(),
@@ -71,6 +75,15 @@ public class RentabilidadeService {
                     daViagem.get(TipoDespesa.EXTRA))));
         }
         return resultado;
+    }
+
+    /**
+     * Preço do diesel calculado agora, a partir do histórico atual. Usado para
+     * consolidar a referência na finalização ou numa correção explícita do frete.
+     */
+    public PrecoDiesel precoAtual(Long empresaId, Viagem viagem) {
+        Long caminhaoId = viagem.getCaminhao().getId();
+        return resolverPreco(viagem, abastecimentos.totaisDieselPorViagem(empresaId, Set.of(caminhaoId)));
     }
 
     /**

@@ -94,6 +94,49 @@ public class Viagem {
     @Column(name = "finalizada_em")
     private Instant finalizadaEm;
 
+    // Referência de preço do diesel consolidada na finalização (ou na correção
+    // explícita deste frete). Enquanto preenchida, o cálculo do frete usa estes
+    // valores e não consulta o histórico de outras viagens.
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origem_preco_diesel", length = 30)
+    private OrigemPrecoDiesel origemPrecoDiesel;
+
+    @Column(name = "preco_diesel_valor_pago", precision = 17, scale = 2)
+    private BigDecimal precoDieselValorPago;
+
+    @Column(name = "preco_diesel_litros", precision = 14, scale = 3)
+    private BigDecimal precoDieselLitros;
+
+    /** Preço médio exibido (4 casas). O cálculo usa valor pago ÷ litros, sem arredondar antes. */
+    @Column(name = "preco_diesel_medio", precision = 10, scale = 4)
+    private BigDecimal precoDieselMedio;
+
+    @Column(name = "viagem_referencia_preco_id")
+    private Long viagemReferenciaPrecoId;
+
+    @Column(name = "referencia_consolidada_em")
+    private Instant referenciaConsolidadaEm;
+
+    /** Grava a referência de preço usada por este frete, com o instante da consolidação. */
+    public void consolidarReferencia(PrecoDiesel preco, Instant em) {
+        this.origemPrecoDiesel = preco.origem();
+        this.precoDieselValorPago = preco.totalPago();
+        this.precoDieselLitros = preco.totalLitros();
+        this.precoDieselMedio = preco.precoMedio();
+        this.viagemReferenciaPrecoId = preco.viagemReferenciaId();
+        this.referenciaConsolidadaEm = em;
+    }
+
+    /** Referência consolidada, ou null se ainda não houve consolidação. */
+    public PrecoDiesel referenciaConsolidada() {
+        if (referenciaConsolidadaEm == null || origemPrecoDiesel == null) {
+            return null;
+        }
+        return new PrecoDiesel(precoDieselValorPago, precoDieselLitros, origemPrecoDiesel,
+                viagemReferenciaPrecoId, referenciaConsolidadaEm);
+    }
+
     public boolean isFinalizada() {
         return status == StatusViagem.FINALIZADA;
     }

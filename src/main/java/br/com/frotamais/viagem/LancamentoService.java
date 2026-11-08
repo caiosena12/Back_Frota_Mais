@@ -52,7 +52,12 @@ public class LancamentoService {
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
         Viagem v = viagemParaLancar(viagemId, req.data());
         Abastecimento a = abastecimento(v, id);
+        boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
         preencher(a, req);
+        if (v.isFinalizada() && envolveDiesel) {
+            // Correção do diesel de um frete finalizado: recalcula a referência só dele.
+            viagens.consolidarReferencia(logado.empresaId(), v);
+        }
         return AbastecimentoResponse.de(a);
     }
 

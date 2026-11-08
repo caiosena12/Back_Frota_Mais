@@ -94,6 +94,7 @@ public final class CalculadoraRentabilidade {
                 preco.precoMedio(),
                 preco.origem(),
                 preco.viagemReferenciaId(),
+                preco.consolidadaEm(),
                 vazio.custo(),
                 carregado.custo(),
                 arla,
