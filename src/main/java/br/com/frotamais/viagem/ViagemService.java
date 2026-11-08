@@ -124,7 +124,6 @@ public class ViagemService {
         }
         for (DespesaExtraRequest d : req.despesasExtrasOuVazio()) {
             RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), d.data());
-            RegrasLancamento.descricaoExtra(d.descricao());
         }
         exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
 
@@ -151,7 +150,7 @@ public class ViagemService {
             despesas.save(despesa(v, autor, TipoDespesa.PEDAGIO, null, p.data(), p.valor()));
         }
         for (DespesaExtraRequest d : req.despesasExtrasOuVazio()) {
-            despesas.save(despesa(v, autor, TipoDespesa.EXTRA, RegrasLancamento.descricaoExtra(d.descricao()),
+            despesas.save(despesa(v, autor, TipoDespesa.EXTRA, d.descricao().trim(),
                     d.data(), d.valor()));
         }
 

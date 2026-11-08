@@ -72,6 +72,7 @@ Invariantes que não podem ser quebrados:
 - **Plausibilidade:** os limites ficam em `app.viagens.limites.*` (`LimitesPlausibilidade`), lidos a cada operação por `PoliticaCalculo.limites()`. Não espalhe constantes pelo código. Arla não tem limite de preço nem de tanque.
 - **Viagem histórica** (`POST /api/viagens/historicas`): nasce finalizada, numa transação, com tudo validado antes de gravar.
 - **Viagem finalizada:** não aceita `POST` nem `DELETE` de lançamento.
+- **Despesa extra:** descrição livre. Não bloqueie palavras (alimentação inclusive) nem crie categorias ou classificação automática sem decisão de negócio.
 - **Caminhão:** com viagem aberta não é inativado; com histórico não é excluído.
 
 **Spring Boot 4:** Jackson é 3.x (`tools.jackson.databind`), `@AutoConfigureMockMvc` fica em `org.springframework.boot.webmvc.test.autoconfigure` e `include-message` é `spring.web.error.*`. Não troque imports por memória do Boot 3.

@@ -196,7 +196,7 @@ public class LancamentoService {
     }
 
     private static void preencher(Despesa d, DespesaExtraRequest req) {
-        d.setDescricao(RegrasLancamento.descricaoExtra(req.descricao()));
+        d.setDescricao(req.descricao().trim());
         d.setData(req.data());
         d.setValor(req.valor());
     }

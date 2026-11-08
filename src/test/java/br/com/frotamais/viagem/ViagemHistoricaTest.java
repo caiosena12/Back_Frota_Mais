@@ -213,7 +213,7 @@ class ViagemHistoricaTest extends ApiViagemTeste {
         consumo.put("consumoMedioCarregado", "99.99");
         cadastrar(consumo, 400);
 
-        // Lançamentos: data fora do período, diesel implausível, acima do tanque, alimentação, valor zero.
+        // Lançamentos: data fora do período, diesel implausível, acima do tanque, valor zero.
         for (Map<String, Object> extra : List.of(
                 Map.<String, Object>of("pedagios", List.of(corpo("data", "2025-03-13", "valor", "10.00"))),
                 Map.<String, Object>of("abastecimentos", List.of(
@@ -221,9 +221,7 @@ class ViagemHistoricaTest extends ApiViagemTeste {
                 Map.<String, Object>of("abastecimentos", List.of(
                         corpo("tipo", "DIESEL", "data", "2025-03-10", "litros", "601", "valorTotal", "3606.00"))),
                 Map.<String, Object>of("abastecimentos", List.of(
-                        corpo("tipo", "ARLA", "data", "2025-03-10", "litros", "0", "valorTotal", "10.00"))),
-                Map.<String, Object>of("despesasExtras", List.of(
-                        corpo("descricao", "Almoço do motorista", "data", "2025-03-10", "valor", "45.00"))))) {
+                        corpo("tipo", "ARLA", "data", "2025-03-10", "litros", "0", "valorTotal", "10.00"))))) {
             Map<String, Object> c = historica("2025-03-10", "2025-03-12");
             c.putAll(extra);
             cadastrar(c, 400);

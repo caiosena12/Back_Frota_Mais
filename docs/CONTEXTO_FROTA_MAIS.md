@@ -109,7 +109,7 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 **Cadastro de viagem histórica [CONFIRMADO][IMPLEMENTADO 08/11/2026, P16]** (`POST /api/viagens/historicas`, só DONO):
 
 - Serve para um frete **esquecido**, que já aconteceu. Nasce **finalizado**, numa única transação, com seus lançamentos. Nunca nasce em andamento: um período aberto no passado bloquearia todas as viagens posteriores do caminhão.
-- Exige os dados de uma viagem finalizada e aplica todas as validações: datas, odômetro, consumo, plausibilidade, capacidade do tanque, alimentação e período de cada lançamento.
+- Exige os dados de uma viagem finalizada e aplica todas as validações: datas, odômetro, consumo, plausibilidade, capacidade do tanque e período de cada lançamento.
 - Recusa (`409`) sobreposição com **qualquer** viagem do caminhão, inclusive em andamento.
 - Guarda as datas reais do percurso e, em `cadastroRetroativoEm`, quando o cadastro foi feito.
 - Preço do diesel: média dos abastecimentos próprios; sem eles, só uma referência **anterior ao início** da viagem histórica. Nunca o preço de uma viagem que ocorreu depois, mesmo já cadastrada. Sem referência anterior válida, o frete fica incompleto, sem custo de diesel inventado.
@@ -159,11 +159,10 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 
 - **[CONFIRMADO]** Pedágios são **custo da viagem** e entram pelas **Ações** da viagem.
 - **[CONFIRMADO 08/11/2026]** Cada pedágio tem **data e valor efetivamente pago**. Não há horário, valor original, desconto, porcentagem nem cálculo da tag. Eixos também não são modelados.
-- **[CONFIRMADO]** Despesas extras: **descrição, data e valor**. **Alimentação não é categoria de custo extra.** Manutenção não é despesa do frete.
-- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P17]** Despesa extra relacionada a alimentação é recusada (`400`) na inclusão, na correção e no cadastro histórico. A descrição é normalizada (sem acentos, minúscula, pontuação e espaços repetidos viram separador) e dividida em **palavras**. É recusada se alguma palavra for: alimentação, refeição, lanche, almoço, jantar, café (o que cobre "café da manhã"), restaurante, marmita ou comida, no singular ou no plural.
-  - A comparação é por **palavra inteira**, para não bloquear por acidente palavras que só contêm as letras de um termo: "Almoxarifado", "Cafeicultura", "Restauração do baú" e "Lanchas" são aceitas.
-  - Consequência: palavras fora da lista, como "lanchonete", "refeitório", "janta" ou "marmitex", **não** são bloqueadas; e "café" bloqueia também descrições sem relação com alimentação, como "descarga de café" (P17).
-  - Alimentação **não** é categoria de despesa permitida e nunca entra na rentabilidade.
+- **[CONFIRMADO]** Despesas extras: **descrição, data e valor**. Manutenção não é despesa do frete.
+- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P17] Despesas extras são livres.** Cada empresa decide quais gastos registrar: a descrição é texto livre e **nenhuma palavra é bloqueada**. Alimentação, refeição, lanche, almoço, café, restaurante e qualquer outra descrição são aceitas. Valem só as validações dos campos: descrição obrigatória e não vazia (até 200 caracteres), data dentro do período da viagem e não futura, e valor positivo. Não há categoria, classificação automática nem campo adicional.
+  - Toda despesa extra registrada entra **uma única vez** no custo operacional e na rentabilidade do frete.
+  - **Substituído em 08/11/2026:** a regra anterior, que recusava alimentação (primeiro o termo "alimentação", depois uma lista de palavras), foi removida.
 - **[IMPLEMENTADO]** Pedágios e despesas extras na tabela `despesas_viagem`, com `tipo` `PEDAGIO` ou `EXTRA`.
 
 ### 2.5 Fretes, receitas, despesas e rentabilidade
@@ -457,7 +456,7 @@ Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Reposito
 | `ViagemController`, `LancamentoController` | Rotas. `@PreAuthorize("hasRole('DONO')")` na classe inteira. |
 | `ViagemService` | Abertura, cadastro histórico, alteração, finalização, consulta e listagem. Valida um "estado candidato" antes de alterar a entidade. Grava a fotografia financeira (`consolidar`). |
 | `LancamentoService` | Abastecimentos, pedágios e despesas extras. |
-| `RegrasLancamento` | Validações puras dos lançamentos (período, plausibilidade do diesel, capacidade do tanque, alimentação), usadas pelos lançamentos e pelo cadastro histórico. |
+| `RegrasLancamento` | Validações puras dos lançamentos (período, plausibilidade do diesel, capacidade do tanque), usadas pelos lançamentos e pelo cadastro histórico. |
 | `RentabilidadeService` | Devolve a fotografia dos fretes finalizados. Para viagens em andamento, reúne os dados em poucas consultas filtradas pela empresa e chama a calculadora com a política atual. |
 | `ResultadoConsolidado` | Fotografia financeira (`@Embeddable` em `Viagem`): resultado e política de cálculo gravados na finalização. |
 | `PoliticaCalculo` | Fornece os limites vigentes no momento de cada operação. |
@@ -543,7 +542,7 @@ margemPercentual = Σ lucro (fretes completos) ÷ Σ receita (mesmos fretes) × 
 - O caminhão precisa ser da empresa e estar `ATIVO`, sem outra viagem `EM_ANDAMENTO` (na abertura) e sem viagem com período sobreposto. Única data compartilhável: o dia em que uma viagem termina e a seguinte começa; duas viagens não começam no mesmo dia.
 - Cadastro histórico: tudo o que a finalização exige, mais cada lançamento dentro do período, validado antes de gravar qualquer coisa.
 - Consumo dentro de `app.viagens.limites.consumo-*`; diesel com preço por litro dentro de `app.viagens.limites.preco-diesel-*` e litros até a capacidade do tanque, se cadastrada.
-- Despesa extra não pode conter palavra de alimentação na descrição (seção 2.4).
+- Despesa extra: descrição livre, sem bloqueio por palavra (seção 2.4).
 - Arla: litros e valor positivos, sem outros limites.
 
 **Configuração** (`application.properties`; podem ser sobrescritas por variável de ambiente, como `APP_VIAGENS_LIMITES_CONSUMO_MAXIMO`):
@@ -596,7 +595,7 @@ Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de sub
 | 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF; merge no PR #3 (`c9dcaf9`) |
 | 08/11 | branch `feat/viagens` | Módulo de viagens (seção 4.9), autorizado pelo responsável. Suíte com 56 testes. Sem push nem PR |
 | 08/11 | branch `feat/viagens` | Auditoria e correções: sobreposição de períodos, referência de preço congelada, limites de plausibilidade, bloqueio de lançamentos após a finalização, alimentação, proteção de caminhões. Suíte com 85 testes |
-| 08/11 | branch `feat/viagens` | Segunda auditoria (P15 a P19): fotografia financeira do frete finalizado, viagem histórica, palavras de alimentação, Arla, dia de fronteira entre fretes, indicadores ponderados e por semana, teste real de concorrência. Suíte com 106 testes |
+| 08/11 | branch `feat/viagens` | Segunda auditoria (P15 a P19): fotografia financeira do frete finalizado, viagem histórica, despesas extras livres (bloqueio de alimentação removido), Arla, dia de fronteira entre fretes, indicadores ponderados e por semana, teste real de concorrência. Suíte com 106 testes |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -654,11 +653,11 @@ Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações f
 | Viagens: isolamento entre empresas em todas as rotas, com tokens reais | `IsolamentoEmpresaViagemTest` | Não |
 | Viagens: MOTORISTA (perfil do banco) → `403`; sem token → `401` | `PermissaoViagemTest` | Só o `401`, com `curl` na API em execução contra `frotamais_test` |
 | Suíte com 56 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, na branch `feat/viagens` (08/11/2026) | Não se aplica |
-| Correções da auditoria: sobreposição, referência congelada (cenários A2 e A3), plausibilidade, lançamentos após finalização, alimentação, caminhões | `SobreposicaoViagemTest`, `ReferenciaCongeladaTest`, `PlausibilidadeViagemTest`, `CalculadoraRentabilidadeTest`, `LancamentoViagemFinalizadaTest`, `AlimentacaoDespesaTest`, `CaminhaoHistoricoTest` | Subida da API com limites inválidos recusada |
+| Correções da auditoria: sobreposição, referência congelada (cenários A2 e A3), plausibilidade, lançamentos após finalização, alimentação (regra removida depois, P17), caminhões | `SobreposicaoViagemTest`, `ReferenciaCongeladaTest`, `PlausibilidadeViagemTest`, `CalculadoraRentabilidadeTest`, `LancamentoViagemFinalizadaTest`, `AlimentacaoDespesaTest`, `CaminhaoHistoricoTest` | Subida da API com limites inválidos recusada |
 | Suíte com 85 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, após as correções (08/11/2026) | Não se aplica |
 | Fotografia financeira estável com mudança de limites; correção explícita recalcula só o frete corrigido | `FotografiaFinanceiraTest` | Não |
 | Viagem histórica: válida, sobreposição, referência anterior, referência posterior, sem referência, validações, isolamento e permissão | `ViagemHistoricaTest` | Não |
-| Alimentação por palavra, Arla, fluxo do deslocamento vazio, indicadores ponderados e por semana | `AlimentacaoDespesaTest`, `ArlaViagemTest`, `DeslocamentoVazioTest`, `IndicadoresPonderadosTest` | Não |
+| Despesas extras livres, Arla, fluxo do deslocamento vazio, indicadores ponderados e por semana | `DespesaExtraLivreTest`, `ArlaViagemTest`, `DeslocamentoVazioTest`, `IndicadoresPonderadosTest` | Não |
 | Concorrência real: 8 aberturas e 8 cadastros históricos simultâneos, só um vence | `ConcorrenciaViagemTest` (commit real em `frotamais_test`, limpeza só da empresa do teste) | Mutação sem o bloqueio: as 8 venceram |
 | Suíte com 106 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test` (08/11/2026) | Não se aplica |
 
@@ -728,7 +727,7 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 | `ReferenciaCongeladaTest` | 4 | Cenários A2 e A3 da auditoria; correção explícita recalcula só o frete corrigido |
 | `PlausibilidadeViagemTest` | 4 | Preço e consumo fora dos limites, capacidade do tanque, referência histórica implausível |
 | `LancamentoViagemFinalizadaTest` | 5 | `POST` e `DELETE` recusados nos quatro tipos; `PUT` do dono; MOTORISTA recusado |
-| `AlimentacaoDespesaTest` | 5 | Termos de alimentação por palavra, sem bloqueio por correspondência parcial, na inclusão e na correção |
+| `DespesaExtraLivreTest` | 3 | Qualquer descrição aceita (inclusão, correção e cadastro histórico), soma única no custo, validação dos campos |
 | `ArlaViagemTest` | 1 | Arla: litros e valor positivos, sem limite de preço nem do tanque de diesel |
 | `FotografiaFinanceiraTest` | 4 | Fotografia gravada, estável com mudança de limites; correção explícita só do frete corrigido |
 | `ViagemHistoricaTest` | 7 | Cadastro retroativo finalizado, sobreposição, referência anterior e posterior, sem referência, validações, isolamento e permissão |
@@ -843,7 +842,7 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 
 - ~~P15.~~ Só fretes finalizados e completos nos totais oficiais; incompletos à parte, com soma informativa do frete; margem do período ponderada; semana de segunda a domingo. A ordem de viagens no mesmo dia deixou de existir: duas viagens do caminhão não começam no mesmo dia.
 - ~~P16.~~ Viagem esquecida: cadastro histórico já finalizado (`POST /api/viagens/historicas`), só DONO, com preço só de referência anterior.
-- ~~P17.~~ Alimentação: lista de palavras, por palavra inteira.
+- ~~P17.~~ Despesas extras livres: nenhuma descrição é bloqueada, nem a de alimentação.
 - ~~P18.~~ Padrões dos limites mantidos; Arla sem limite de preço ou consumo; fotografia financeira guarda a política usada, e mudar limites não altera fretes finalizados.
 - ~~P19.~~ Custos do vazio pertencem ao próximo frete; o próximo frete pode começar no dia da descarga; nada é transferido automaticamente.
 
@@ -855,7 +854,6 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 - **P20.** Detalhes do módulo de viagens ainda a confirmar:
   - Valor do frete exigido só na finalização (hoje é opcional na abertura).
   - Caminhão `INATIVO` pode receber **viagem histórica** de quando estava ativo? Hoje não (`409`), pela regra da abertura.
-  - Alimentação: bloquear também "lanchonete", "refeitório", "janta", "marmitex"? Aceitar que "café" bloqueie descrições como "descarga de café"?
   - Capacidade do tanque de Arla: criar um campo no caminhão para limitar os litros de Arla?
 - **P9.** Senha inicial do motorista: gerada ou definida pelo dono? O dono aparece como motorista nas viagens?
 - **P10.** Renomear "R$/Km"? Em que etapa entra a exportação PDF/Excel?

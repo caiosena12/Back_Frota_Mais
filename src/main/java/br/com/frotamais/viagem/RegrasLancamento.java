@@ -2,11 +2,7 @@ package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
-import java.text.Normalizer;
 import java.time.LocalDate;
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Set;
 
 import br.com.frotamais.caminhao.Caminhao;
 import br.com.frotamais.comum.RegraNegocioException;
@@ -17,22 +13,6 @@ import br.com.frotamais.comum.RegraNegocioException;
  * histórica. Funções puras: recebem tudo o que precisam.
  */
 final class RegrasLancamento {
-
-    /**
-     * Palavras que identificam alimentação, já normalizadas (sem acento,
-     * minúsculas), no singular e no plural. "Café da manhã" é reconhecido
-     * pela palavra "cafe".
-     */
-    private static final Set<String> ALIMENTACAO = Set.of(
-            "alimentacao", "alimentacoes",
-            "refeicao", "refeicoes",
-            "lanche", "lanches",
-            "almoco", "almocos",
-            "jantar", "jantares",
-            "cafe", "cafes",
-            "restaurante", "restaurantes",
-            "marmita", "marmitas",
-            "comida", "comidas");
 
     private RegrasLancamento() {
     }
@@ -77,29 +57,5 @@ final class RegrasLancamento {
             throw RegraNegocioException.invalido("Os litros abastecidos ultrapassam a capacidade do tanque do"
                     + " caminhão (" + capacidade + " L).");
         }
-    }
-
-    /** Descrição de despesa extra aceita (sem espaços nas pontas). Alimentação é recusada. */
-    static String descricaoExtra(String descricao) {
-        if (ehAlimentacao(descricao)) {
-            throw RegraNegocioException.invalido(
-                    "Alimentação não é despesa do frete e não entra nos custos do Frota+.");
-        }
-        return descricao.trim();
-    }
-
-    /**
-     * Alimentação não é custo do Frota+. A descrição é normalizada (sem
-     * acentos, minúscula, pontuação e espaços repetidos viram um separador) e
-     * quebrada em palavras; é recusada se alguma palavra for um dos termos de
-     * ALIMENTACAO. A comparação é por palavra inteira, para não bloquear por
-     * acidente palavras que só contêm as letras de um termo (como
-     * "almoxarifado" ou "cafeicultura").
-     */
-    static boolean ehAlimentacao(String descricao) {
-        String normalizada = Normalizer.normalize(descricao, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT);
-        return Arrays.stream(normalizada.split("[^a-z0-9]+")).anyMatch(ALIMENTACAO::contains);
     }
 }
