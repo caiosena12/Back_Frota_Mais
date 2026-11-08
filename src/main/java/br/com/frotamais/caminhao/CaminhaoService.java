@@ -2,12 +2,17 @@ package br.com.frotamais.caminhao;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import br.com.frotamais.comum.RegraNegocioException;
 import br.com.frotamais.empresa.EmpresaRepository;
 import br.com.frotamais.seguranca.UsuarioLogado;
+import br.com.frotamais.viagem.StatusViagem;
+import br.com.frotamais.viagem.ViagemRepository;
 
 @Service
 public class CaminhaoService {
@@ -15,11 +20,14 @@ public class CaminhaoService {
     private final CaminhaoRepository repository;
     private final EmpresaRepository empresas;
     private final UsuarioLogado logado;
+    private final ViagemRepository viagens;
 
-    public CaminhaoService(CaminhaoRepository repository, EmpresaRepository empresas, UsuarioLogado logado) {
+    public CaminhaoService(CaminhaoRepository repository, EmpresaRepository empresas, UsuarioLogado logado,
+            ViagemRepository viagens) {
         this.repository = repository;
         this.empresas = empresas;
         this.logado = logado;
+        this.viagens = viagens;
     }
 
     public List<CaminhaoResponse> listar() {
@@ -44,8 +52,20 @@ public class CaminhaoService {
         return CaminhaoResponse.de(repository.save(caminhao));
     }
 
+    /**
+     * Bloqueia o caminhão (o mesmo bloqueio da abertura de viagem), para que a
+     * inativação e a abertura de uma viagem não se cruzem.
+     */
+    @Transactional
     public CaminhaoResponse atualizar(Long id, CaminhaoRequest request) {
-        Caminhao caminhao = encontrar(id);
+        Caminhao caminhao = travar(id);
+        StatusCaminhao novoStatus = request.status() != null ? request.status() : StatusCaminhao.ATIVO;
+        if (novoStatus == StatusCaminhao.INATIVO
+                && viagens.existsByEmpresaIdAndCaminhaoIdAndStatus(
+                        logado.empresaId(), caminhao.getId(), StatusViagem.EM_ANDAMENTO)) {
+            throw RegraNegocioException.conflito(
+                    "O caminhão tem uma viagem em andamento e não pode ser inativado. Finalize a viagem antes.");
+        }
         String placa = normalizarPlaca(request.placa());
         if (!placa.equals(caminhao.getPlaca())
                 && repository.existsByEmpresaIdAndPlaca(logado.empresaId(), placa)) {
@@ -55,8 +75,31 @@ public class CaminhaoService {
         return CaminhaoResponse.de(repository.save(caminhao));
     }
 
+    /**
+     * Caminhão com qualquer viagem (em andamento ou finalizada) não é excluído:
+     * o histórico financeiro depende dele. Não há exclusão em cascata. Se uma
+     * viagem for criada entre a checagem e a exclusão, a chave estrangeira do
+     * banco recusa e a resposta também é 409.
+     */
+    @Transactional
     public void excluir(Long id) {
-        repository.delete(encontrar(id));
+        Caminhao caminhao = travar(id);
+        if (viagens.existsByEmpresaIdAndCaminhaoId(logado.empresaId(), caminhao.getId())) {
+            throw RegraNegocioException.conflito(
+                    "O caminhão tem histórico de viagens e não pode ser excluído. Inative-o.");
+        }
+        try {
+            repository.delete(caminhao);
+            repository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw RegraNegocioException.conflito(
+                    "O caminhão tem histórico de viagens e não pode ser excluído. Inative-o.");
+        }
+    }
+
+    private Caminhao travar(Long id) {
+        return repository.travarPorIdEEmpresa(id, logado.empresaId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Caminhão não encontrado"));
     }
 
     private Caminhao encontrar(Long id) {
