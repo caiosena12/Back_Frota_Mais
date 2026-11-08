@@ -67,6 +67,13 @@ public class ViagemController {
         return service.criar(request);
     }
 
+    /** Frete esquecido, cadastrado já finalizado, com seus lançamentos. Só DONO (regra da classe). */
+    @PostMapping("/historicas")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ViagemResponse criarHistorica(@Valid @RequestBody ViagemHistoricaRequest request) {
+        return service.criarHistorica(request);
+    }
+
     @PutMapping("/{id}")
     public ViagemResponse atualizar(@PathVariable Long id, @Valid @RequestBody ViagemAtualizacaoRequest request) {
         return service.atualizar(id, request);

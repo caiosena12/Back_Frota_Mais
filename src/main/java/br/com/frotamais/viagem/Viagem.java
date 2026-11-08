@@ -95,6 +95,14 @@ public class Viagem {
     @Column(name = "finalizada_em")
     private Instant finalizadaEm;
 
+    /**
+     * Preenchido quando o frete foi cadastrado depois de acontecer (viagem
+     * histórica): é o momento do cadastro. As datas do frete continuam sendo as
+     * do percurso real.
+     */
+    @Column(name = "cadastro_retroativo_em")
+    private Instant cadastroRetroativoEm;
+
     /** Fotografia financeira do frete finalizado. Nula enquanto em andamento. */
     @Embedded
     private ResultadoConsolidado resultado;
@@ -197,4 +205,6 @@ public class Viagem {
     public Instant getAtualizadaEm() { return atualizadaEm; }
     public Instant getFinalizadaEm() { return finalizadaEm; }
     public void setFinalizadaEm(Instant finalizadaEm) { this.finalizadaEm = finalizadaEm; }
+    public Instant getCadastroRetroativoEm() { return cadastroRetroativoEm; }
+    public void setCadastroRetroativoEm(Instant cadastroRetroativoEm) { this.cadastroRetroativoEm = cadastroRetroativoEm; }
 }

@@ -8,6 +8,9 @@ import java.util.List;
 /**
  * Detalhe do frete. kmFinalVazio é derivado: o deslocamento vazio termina no
  * carregamento, então é igual a kmInicialCarregado quando há vazio.
+ *
+ * cadastroRetroativoEm preenchido: frete cadastrado depois de acontecer
+ * (POST /api/viagens/historicas), no instante indicado.
  */
 public record ViagemResponse(
         Long id,
@@ -28,6 +31,7 @@ public record ViagemResponse(
         Instant criadaEm,
         Instant atualizadaEm,
         Instant finalizadaEm,
+        Instant cadastroRetroativoEm,
         List<AbastecimentoResponse> abastecimentosDiesel,
         List<AbastecimentoResponse> abastecimentosArla,
         List<PedagioResponse> pedagios,
@@ -55,6 +59,7 @@ public record ViagemResponse(
                 v.getCriadaEm(),
                 v.getAtualizadaEm(),
                 v.getFinalizadaEm(),
+                v.getCadastroRetroativoEm(),
                 abastecimentos.stream().filter(a -> a.getTipo() == TipoCombustivel.DIESEL)
                         .map(AbastecimentoResponse::de).toList(),
                 abastecimentos.stream().filter(a -> a.getTipo() == TipoCombustivel.ARLA)

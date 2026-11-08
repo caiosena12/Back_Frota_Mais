@@ -19,6 +19,7 @@ import br.com.frotamais.caminhao.StatusCaminhao;
 import br.com.frotamais.comum.RegraNegocioException;
 import br.com.frotamais.empresa.EmpresaRepository;
 import br.com.frotamais.seguranca.UsuarioLogado;
+import br.com.frotamais.usuario.Usuario;
 import br.com.frotamais.usuario.UsuarioRepository;
 
 /**
@@ -93,12 +94,89 @@ public class ViagemService {
         return detalhar(empresaId, v);
     }
 
+    /**
+     * Cadastro retroativo de um frete esquecido, já finalizado, numa única
+     * transação. Nunca nasce em andamento (um período aberto no passado
+     * bloquearia todas as viagens posteriores do caminhão).
+     *
+     * Tudo é validado antes de gravar qualquer coisa: dados obrigatórios de
+     * frete finalizado, datas, odômetro, consumo, cada lançamento e a
+     * sobreposição com qualquer viagem do caminhão (inclusive em andamento).
+     * A fotografia financeira é gravada só para este frete; nenhum outro frete
+     * finalizado é recalculado.
+     */
+    public ViagemResponse criarHistorica(ViagemHistoricaRequest req) {
+        Long empresaId = logado.empresaId();
+        LimitesPlausibilidade limites = politica.limites();
+        Caminhao caminhao = travarCaminhaoAtivo(req.caminhaoId(), empresaId);
+
+        Estado estado = new Estado(req.dataInicio(), req.dataFim(), req.valorFrete(), texto(req.origem()),
+                texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), req.kmFinalCarregado(),
+                req.consumoMedioVazio(), req.consumoMedioCarregado());
+        estado.validarCoerencia(limites);
+        estado.validarCompleta();
+        for (AbastecimentoRequest a : req.abastecimentosOuVazio()) {
+            RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), a.data());
+            RegrasLancamento.validarAbastecimento(caminhao, a, limites);
+        }
+        for (PedagioRequest p : req.pedagiosOuVazio()) {
+            RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), p.data());
+        }
+        for (DespesaExtraRequest d : req.despesasExtrasOuVazio()) {
+            RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), d.data());
+            RegrasLancamento.descricaoExtra(d.descricao());
+        }
+        exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
+
+        Instant agora = agora();
+        Viagem v = nova(empresaId, caminhao);
+        estado.aplicar(v);
+        v.setStatus(StatusViagem.FINALIZADA);
+        v.setFinalizadaEm(agora);
+        v.setCadastroRetroativoEm(agora);
+        viagens.save(v);
+
+        Usuario autor = v.getCriadoPor();
+        for (AbastecimentoRequest item : req.abastecimentosOuVazio()) {
+            Abastecimento a = new Abastecimento();
+            a.setViagem(v);
+            a.setCriadoPor(autor);
+            a.setTipo(item.tipo());
+            a.setData(item.data());
+            a.setLitros(item.litros());
+            a.setValorTotal(item.valorTotal());
+            abastecimentos.save(a);
+        }
+        for (PedagioRequest p : req.pedagiosOuVazio()) {
+            despesas.save(despesa(v, autor, TipoDespesa.PEDAGIO, null, p.data(), p.valor()));
+        }
+        for (DespesaExtraRequest d : req.despesasExtrasOuVazio()) {
+            despesas.save(despesa(v, autor, TipoDespesa.EXTRA, RegrasLancamento.descricaoExtra(d.descricao()),
+                    d.data(), d.valor()));
+        }
+
+        consolidar(empresaId, v, true);
+        return detalhar(empresaId, v);
+    }
+
     private Viagem nova(Long empresaId, Caminhao caminhao) {
         Viagem v = new Viagem();
         v.setEmpresa(empresas.getReferenceById(empresaId));
         v.setCaminhao(caminhao);
         v.setCriadoPor(usuarios.getReferenceById(logado.usuarioId()));
         return v;
+    }
+
+    private static Despesa despesa(Viagem v, Usuario autor, TipoDespesa tipo, String descricao,
+            LocalDate data, BigDecimal valor) {
+        Despesa d = new Despesa();
+        d.setViagem(v);
+        d.setCriadoPor(autor);
+        d.setTipo(tipo);
+        d.setDescricao(descricao);
+        d.setData(data);
+        d.setValor(valor);
+        return d;
     }
 
     /** O bloqueio do caminhão serializa aberturas e cadastros simultâneos no mesmo caminhão. */
