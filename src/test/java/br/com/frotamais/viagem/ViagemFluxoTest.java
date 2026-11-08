@@ -227,9 +227,13 @@ class ViagemFluxoTest extends ApiViagemTeste {
         dinheiro("0.00", semArla.get("custoArla"));
         assertTrue(semArla.get("calculoCompleto").asBoolean());
 
-        // Arla lançado depois (correção pelo dono): soma ao custo e não muda o preço do diesel.
-        arla(token, id, "2025-03-03", "40", "150.00");
-        JsonNode v = buscarViagem(token, id);
+        // Outro frete igual, agora com Arla: soma ao custo e não muda o preço do diesel.
+        long comArlaId = criarViagem(token, corpo("caminhaoId", caminhaoId, "dataInicio", "2025-03-04",
+                "origem", "A", "destino", "B", "valorFrete", "2000.00", "kmInicialCarregado", 0));
+        diesel(token, comArlaId, "2025-03-04", "100", "600.00");
+        arla(token, comArlaId, "2025-03-04", "40", "150.00");
+        JsonNode v = finalizar(token, comArlaId, corpo("dataFim", "2025-03-04", "kmFinalCarregado", 400,
+                "consumoMedioCarregado", "2.50"), 200);
         JsonNode comArla = v.get("rentabilidade");
         assertEquals(1, v.get("abastecimentosArla").size());
         assertEquals(1, v.get("abastecimentosDiesel").size());

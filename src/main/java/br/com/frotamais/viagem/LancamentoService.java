@@ -18,8 +18,9 @@ import br.com.frotamais.usuario.UsuarioRepository;
  * token; depois busca o lançamento pelo id da viagem e da empresa. Assim um
  * id de lançamento de outra viagem ou de outra empresa responde 404.
  *
- * Exclusão só com a viagem em andamento. Depois de finalizada, o lançamento
- * pode ser corrigido (PUT), mas não apagado, para preservar o histórico.
+ * Inclusão e exclusão só com a viagem em andamento. Depois de finalizada, o
+ * dono pode apenas corrigir (PUT) os lançamentos existentes, sem tirá-los do
+ * período da viagem; nada é incluído nem apagado, para preservar o histórico.
  */
 @Service
 @Transactional
@@ -46,7 +47,7 @@ public class LancamentoService {
     // ---- Abastecimentos (diesel e Arla) ----
 
     public AbastecimentoResponse adicionarAbastecimento(Long viagemId, AbastecimentoRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, req.data());
         validarAbastecimento(v, req);
         Abastecimento a = new Abastecimento();
         a.setViagem(v);
@@ -76,7 +77,7 @@ public class LancamentoService {
     // ---- Pedágios ----
 
     public PedagioResponse adicionarPedagio(Long viagemId, PedagioRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, req.data());
         Despesa d = novaDespesa(v, TipoDespesa.PEDAGIO);
         d.setData(req.data());
         d.setValor(req.valor());
@@ -99,7 +100,7 @@ public class LancamentoService {
     // ---- Despesas extras ----
 
     public DespesaExtraResponse adicionarDespesaExtra(Long viagemId, DespesaExtraRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, req.data());
         Despesa d = novaDespesa(v, TipoDespesa.EXTRA);
         preencher(d, req);
         return DespesaExtraResponse.de(despesas.save(d));
@@ -119,9 +120,28 @@ public class LancamentoService {
 
     // ---- Regras comuns ----
 
+    /**
+     * Inclusão de lançamento novo: só com a viagem em andamento. Depois da
+     * finalização o dono apenas corrige (PUT) os lançamentos existentes.
+     */
+    private Viagem viagemParaIncluir(Long viagemId, LocalDate data) {
+        Viagem v = viagens.travar(viagemId, logado.empresaId());
+        if (v.isFinalizada()) {
+            throw RegraNegocioException.conflito(
+                    "Viagem finalizada: não aceita novos lançamentos. Corrija um lançamento existente.");
+        }
+        validarData(v, data);
+        return v;
+    }
+
     /** Localiza a viagem da empresa e confere se a data do lançamento cabe no período dela. */
     private Viagem viagemParaLancar(Long viagemId, LocalDate data) {
         Viagem v = viagens.travar(viagemId, logado.empresaId());
+        validarData(v, data);
+        return v;
+    }
+
+    private static void validarData(Viagem v, LocalDate data) {
         if (data.isAfter(ViagemService.hoje())) {
             throw RegraNegocioException.invalido("A data do lançamento não pode estar no futuro.");
         }
@@ -134,7 +154,6 @@ public class LancamentoService {
                     "A data do lançamento não pode ser posterior ao fim da viagem.");
         }
         v.marcarAlteracao();
-        return v;
     }
 
     /**

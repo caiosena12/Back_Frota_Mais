@@ -149,7 +149,10 @@ class ViagemValidacaoTest extends ApiViagemTeste {
         finalizar(token, id, corpo("dataFim", "2025-05-12", "kmFinalCarregado", 300,
                 "consumoMedioCarregado", "2.50"), 200);
 
+        // Lançamento novo em viagem finalizada: 409. Correção para fora do período: 400.
         erro(chamar(POST(VIAGENS + "/" + id + "/pedagios"), token,
+                corpo("data", "2025-05-12", "valor", "10.00"), 409), "não aceita novos lançamentos");
+        erro(chamar(PUT(VIAGENS + "/" + id + "/pedagios/" + pedagio), token,
                 corpo("data", "2025-05-13", "valor", "10.00"), 400), "posterior ao fim");
         erro(chamar(DELETE(VIAGENS + "/" + id + "/pedagios/" + pedagio), token, null, 409), "não excluídos");
         chamar(DELETE(VIAGENS + "/" + id + "/abastecimentos/" + dieselId), token, null, 409);
