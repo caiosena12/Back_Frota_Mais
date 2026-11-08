@@ -2,7 +2,9 @@ package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.text.Normalizer;
 import java.time.LocalDate;
+import java.util.Locale;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -215,7 +217,28 @@ public class LancamentoService {
         a.setValorTotal(req.valorTotal());
     }
 
+    /** Termo proibido em despesa extra, já normalizado (sem acento, minúsculo). */
+    private static final String ALIMENTACAO = "alimentacao";
+
+    /**
+     * Alimentação não é custo do Frota+. Compara a descrição sem acentos, sem
+     * diferença de maiúsculas e com espaços normalizados, e recusa qualquer
+     * descrição que contenha o termo.
+     */
+    static boolean ehAlimentacao(String descricao) {
+        String normalizada = Normalizer.normalize(descricao, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", " ")
+                .trim();
+        return normalizada.contains(ALIMENTACAO);
+    }
+
     private static void preencher(Despesa d, DespesaExtraRequest req) {
+        if (ehAlimentacao(req.descricao())) {
+            throw RegraNegocioException.invalido(
+                    "Alimentação não é despesa do frete e não entra nos custos do Frota+.");
+        }
         d.setDescricao(req.descricao().trim());
         d.setData(req.data());
         d.setValor(req.valor());
