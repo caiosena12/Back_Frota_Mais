@@ -7,9 +7,15 @@ import java.util.List;
 /**
  * Totais dos fretes FINALIZADOS cuja dataFim está no período.
  *
- * Os totais (financeiros e de km) consideram só os fretes com cálculo
- * completo; os demais são listados em viagensComCalculoIncompleto, para que um
- * custo desconhecido nunca apareça como zero. Manutenção não entra.
+ * Totais oficiais (financeiros e de km): só fretes com cálculo completo,
+ * lidos da fotografia financeira de cada frete. Os incompletos ficam fora
+ * deles, para que um custo desconhecido nunca apareça como zero: são contados
+ * em viagensIncompletas, listados em viagensComCalculoIncompleto, e
+ * valorFreteIncompletasNaoIncluido é só informativo (NÃO entra na receita
+ * total nem em nenhum outro indicador).
+ *
+ * margemPercentual é ponderada: lucroTotal ÷ receitaTotal × 100.
+ * Manutenção não entra.
  */
 public record IndicadoresResponse(
         LocalDate de,
@@ -18,7 +24,9 @@ public record IndicadoresResponse(
         String criterioPeriodo,
         int viagensFinalizadas,
         int viagensConsideradas,
+        int viagensIncompletas,
         List<Long> viagensComCalculoIncompleto,
+        BigDecimal valorFreteIncompletasNaoIncluido,
         BigDecimal receitaTotal,
         BigDecimal custoDieselVazio,
         BigDecimal custoDieselCarregado,

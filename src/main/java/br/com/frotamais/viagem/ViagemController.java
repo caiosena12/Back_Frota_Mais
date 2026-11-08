@@ -50,10 +50,11 @@ public class ViagemController {
     public IndicadoresResponse indicadores(
             @RequestParam(required = false) Integer ano,
             @RequestParam(required = false) Integer mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate semana,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
             @RequestParam(required = false) Long caminhaoId) {
-        return indicadores.indicadores(ano, mes, de, ate, caminhaoId);
+        return indicadores.indicadores(ano, mes, semana, de, ate, caminhaoId);
     }
 
     @GetMapping("/{id}")

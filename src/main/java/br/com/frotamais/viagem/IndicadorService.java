@@ -1,8 +1,10 @@
 package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +20,16 @@ import br.com.frotamais.seguranca.UsuarioLogado;
 /**
  * Totais dos fretes finalizados num período, para o dashboard e os relatórios.
  *
- * O período é aplicado sobre a data final (descarga) do frete. Filtros:
- * ano; ano e mês; ou um intervalo de/até (que cobre a semana, sem o servidor
- * impor uma definição de semana). Sem filtro: todo o histórico.
+ * O período é aplicado sobre a data final (descarga) do frete. Filtros
+ * (mutuamente exclusivos): ano; ano e mês (calendário); semana (qualquer data
+ * dela: segunda a domingo); ou um intervalo de/até, inclusivo. Sem filtro:
+ * todo o histórico.
+ *
+ * Totais oficiais: só fretes finalizados com cálculo completo, lidos da
+ * fotografia financeira de cada um. Margem do período ponderada: soma dos
+ * lucros ÷ soma das receitas dos mesmos fretes × 100 (nunca média simples das
+ * margens). Fretes incompletos ficam fora dos totais e são apresentados à
+ * parte, com a soma informativa dos seus valores de frete.
  */
 @Service
 @Transactional(readOnly = true)
@@ -41,12 +50,20 @@ public class IndicadorService {
         this.logado = logado;
     }
 
-    public IndicadoresResponse indicadores(Integer ano, Integer mes, LocalDate de, LocalDate ate, Long caminhaoId) {
+    public IndicadoresResponse indicadores(Integer ano, Integer mes, LocalDate semana, LocalDate de, LocalDate ate,
+            Long caminhaoId) {
         Long empresaId = logado.empresaId();
 
+        if (semana != null) {
+            if (ano != null || mes != null || de != null || ate != null) {
+                throw RegraNegocioException.invalido("Use só um filtro de período: ano e mês, semana ou de e até.");
+            }
+            de = semana.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            ate = de.plusDays(6);
+        }
         if (ano != null || mes != null) {
             if (de != null || ate != null) {
-                throw RegraNegocioException.invalido("Use ano e mês ou de e até, não os dois.");
+                throw RegraNegocioException.invalido("Use só um filtro de período: ano e mês, semana ou de e até.");
             }
             if (ano == null) {
                 throw RegraNegocioException.invalido("Informe o ano junto com o mês.");
@@ -78,12 +95,16 @@ public class IndicadorService {
 
         List<RentabilidadeResponse> completas = new ArrayList<>();
         List<Long> incompletas = new ArrayList<>();
+        BigDecimal freteIncompletas = BigDecimal.ZERO.setScale(2);
         for (Viagem v : lista) {
             RentabilidadeResponse r = calculos.get(v.getId());
             if (r.calculoCompleto()) {
                 completas.add(r);
             } else {
                 incompletas.add(v.getId());
+                if (v.getValorFrete() != null) {
+                    freteIncompletas = freteIncompletas.add(v.getValorFrete());
+                }
             }
         }
 
@@ -98,7 +119,9 @@ public class IndicadorService {
                 CRITERIO,
                 lista.size(),
                 completas.size(),
+                incompletas.size(),
                 incompletas,
+                freteIncompletas,
                 receita,
                 somar(completas, RentabilidadeResponse::custoDieselVazio),
                 somar(completas, RentabilidadeResponse::custoDieselCarregado),
