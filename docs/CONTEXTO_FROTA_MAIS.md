@@ -1,6 +1,6 @@
 # Contexto técnico e regras de negócio do Frota+
 
-**Última revisão:** 02/11/2026, com base no commit `bfd02ea`.
+**Última revisão:** 08/11/2026, branch `feat/viagens` (módulo de viagens). Revisão anterior: 02/11/2026, commit `bfd02ea`.
 **Repositório do back-end:** `https://github.com/caiosena12/Back_Frota_Mais` (no Codespaces: `/workspaces/Back_Frota_Mais`).
 
 ---
@@ -56,16 +56,13 @@ Build completo e testes **não foram executados** nesta revisão. Os testes fora
 
 ### 1.4 Funcionalidades do produto
 
-Implementadas: **autenticação**, **multiempresa** e **gestão de caminhões**, esta última com a restrição por motorista ainda pendente.
+Implementadas: **autenticação**, **multiempresa**, **gestão de caminhões** (restrição por motorista ainda pendente) e, desde 08/11/2026, o **módulo de viagens** (seção 4.9): fretes com deslocamento vazio, abastecimentos de diesel e Arla, pedágios, despesas extras, rentabilidade por frete e indicadores por período. Hoje só o DONO acessa viagens.
 
-Planejadas, **ainda sem nenhum código**:
-- Controle de viagens e trechos.
-- Abastecimentos de diesel e Arla, com cálculo de consumo.
-- Despesas: pedágios e outros custos.
+Planejadas, **ainda sem código**:
 - Manutenções.
-- Análise financeira: lucro, prejuízo e custo por km.
-- Dashboards e relatórios por semana, mês e ano.
-- Criação e gestão de motoristas.
+- Custo e lucro por km; consumo médio agregado.
+- Dashboards e relatórios (a API de indicadores já fornece os totais).
+- Criação e gestão de motoristas, e liberação das viagens ao MOTORISTA.
 
 **[IDEIA FUTURA]:** exportação em PDF/Excel; análise de km vazio entre fretes.
 
@@ -73,57 +70,55 @@ Planejadas, **ainda sem nenhum código**:
 
 ## 2. Regras de negócio
 
-### 2.1 Viagens e trechos
+### 2.1 Viagens (fretes)
 
-- **[CONFIRMADO]** **A viagem é o conjunto da operação** e pode ser composta por **vários trechos**: ida, volta e outros.
-- **[CONFIRMADO]** Exemplo: `Palmital → Santos` e `Santos → Palmital` podem representar **uma única viagem concluída**.
-- **[CONFIRMADO]** Cada trecho tem suas próprias informações, especialmente **data, quilometragem e situação da carga: carregado ou vazio**.
-- **[CONFIRMADO]** **A volta não é automaticamente vazia.** A situação de cada trecho é registrada individualmente.
-- **[CONFIRMADO]** Um trecho **não é** obrigatoriamente uma viagem independente.
-- **[CONFIRMADO]** A viagem tem **início** e **finalização**, com status **"Em andamento"** e **"Concluída"** (nomes do protótipo).
-- **[CONFIRMADO]** Fluxo de tela: **"+ Nova Viagem"** abre um **pop-up com os dados mais básicos**. Depois, no menu **Ações** da viagem, o usuário adiciona **abastecimento, pedágios, frete e custos extras**.
-- **[CONFIRMADO]** Campos da viagem: caminhão, **motorista**, rota, data de início, km total, **frete**, pedágios, custos extras. Lista do protótipo: Caminhão, Rota, Data Início, Km Total, Status, Ações.
-- **[CONFIRMADO]** **Quem edita:** o motorista edita o que lançou **enquanto a viagem está em andamento**. Depois disso, **só o dono** corrige. O dono pode alterar qualquer dado.
-- **[PROPOSTO]** Validações: só uma viagem em andamento por caminhão; o motorista pertence à empresa e está vinculado ao caminhão; frete não negativo.
-- **[PROPOSTO]** Status "Cancelada" em vez de excluir, e registro de quem criou e alterou cada lançamento.
+**Regras confirmadas em 08/11/2026**, que **substituem** o modelo anterior de "viagem composta por trechos" e as regras de combustível inicial e final:
 
-**Ponto para revisão:** a regra antiga "cada viagem corresponde a um frete" foi **substituída** pela regra de trechos. Falta definir como frete e receita se relacionam com os trechos (Anexo A, P3).
+- **[CONFIRMADO]** **Cada frete é uma viagem independente.** A viagem começa quando o caminhão sai para buscar a carga e termina quando descarrega essa carga.
+- **[CONFIRMADO]** Exemplo: Frete 1, Cruzália → Santos, carregado, termina ao descarregar em Santos. Frete 2, Santos → São Paulo vazio e São Paulo → Palmital carregado. **O Frete 2 absorve os custos do deslocamento vazio anterior.**
+- **[CONFIRMADO]** Não se mantém uma única viagem aberta enquanto o caminhão realiza vários contratos.
+- **[CONFIRMADO]** O frete pode começar com um **deslocamento vazio**, que pode passar por várias cidades sem cadastro de cada parada. Importa o total acumulado até o carregamento.
+- **[CONFIRMADO]** Pedágios e despesas do deslocamento vazio pertencem ao próximo frete; os do percurso carregado, ao frete atual. Como o frete começa no vazio, tudo é lançado no próprio frete.
+- **[CONFIRMADO]** A viagem tem início e finalização. **[IMPLEMENTADO]** Status `EM_ANDAMENTO` e `FINALIZADA`.
+- **[CONFIRMADO]** Fluxo de tela: **"+ Nova Viagem"** abre um pop-up com os dados básicos; abastecimento, pedágios, frete e custos extras entram depois, pelo menu **Ações**.
+- **[CONFIRMADO]** **Quem edita:** o motorista edita o que lançou enquanto a viagem está em andamento; depois, só o dono corrige. O dono pode alterar qualquer dado.
+- **[CONFIRMADO]** Não permitir alterações que comprometam viagens finalizadas sem regra explícita, e evitar exclusões que prejudiquem o histórico financeiro.
+
+**Decisões de implementação (08/11/2026), aguardando aprovação** (seção 4.9):
+
+- **[IMPLEMENTADO]** Uma única viagem `EM_ANDAMENTO` por caminhão; caminhão `INATIVO` não abre viagem.
+- **[IMPLEMENTADO]** Viagem **não é excluída** (não existe `DELETE`). Abastecimentos e despesas só podem ser excluídos com a viagem em andamento; depois, o dono só corrige por `PUT`.
+- **[IMPLEMENTADO]** O dono corrige viagem finalizada pelo `PUT`, que exige os mesmos dados completos da finalização. Não existe reabertura.
+- **[PENDENTE]** Status "Cancelada" (Anexo A, P8) e campo motorista na viagem (P9, P12).
 
 ### 2.2 Quilometragem carregada e vazia
 
-- **[CONFIRMADO]** O sistema deve identificar os **quilômetros percorridos carregado e vazio**, respeitando os dados de cada trecho.
-- **[CONFIRMADO]** O deslocamento vazio até o local de carga faz parte da viagem e deve ser registrado.
-- **[CONFIRMADO]** Os relatórios mostram **Km Vazio** e **Rodado Vazio (R$)**.
+- **[CONFIRMADO]** Registrar km inicial e final do **deslocamento vazio** e do **percurso carregado**, com o total de cada um e o consumo médio de cada um.
+- **[IMPLEMENTADO]** Três leituras do odômetro: `kmInicialVazio` (saída vazia, opcional), `kmInicialCarregado` (carregamento, que é também o fim do vazio) e `kmFinalCarregado` (descarga). `kmFinalVazio` é exibido e é igual a `kmInicialCarregado`. Isso impede que km fiquem fora dos dois percursos.
+- **[CONFIRMADO]** Os relatórios mostram **Km Vazio** e **Rodado Vazio (R$)**. **[IMPLEMENTADO]** `custoDieselVazio` por frete e no total do período.
 - **[PROPOSTO]** Indicador de **% de km rodados vazios** no período.
-- **[PROPOSTO, a revisar]** Cálculo por três odômetros (saída, carregamento e final). Ele foi pensado para uma viagem de um único carregamento e **pode não servir** para trechos (Anexo A, P4).
-- **[PROPOSTO, a revisar]** Custo do rodado vazio = `km vazio ÷ consumo médio × preço médio do litro`. Fórmula não confirmada (Anexo A, P5).
+- **[PROPOSTO]** Conferir a continuidade do odômetro entre fretes do mesmo caminhão (km inicial do frete ≥ km final do anterior). **Não implementado.**
 
 ### 2.3 Combustível e abastecimentos
 
-- **[CONFIRMADO]** Dois combustíveis: **diesel e Arla**.
-- **[CONFIRMADO]** É possível registrar **vários abastecimentos parciais durante uma mesma viagem**.
-- **[CONFIRMADO]** O motorista **não é obrigado a completar o tanque** em cada abastecimento.
-- **[CONFIRMADO]** Cada abastecimento permite registrar **os litros e o valor gasto**.
-- **[CONFIRMADO]** A viagem preserva as informações de **combustível inicial, abastecimentos e combustível final**.
-- **[CONFIRMADO]** **Não existe consumo fixo por caminhão.** O consumo é calculado conforme os dados reais da viagem. A capacidade do tanque é atributo do caminhão.
-- **[CONFIRMADO]** O relatório mostra **Consumo Médio (km/L)**.
-- **[CONFIRMADO]** O sistema atende quem **enche o tanque** e quem abastece **valores fechados**.
-- **[CONFIRMADO]** O abastecimento é adicionado pelo menu **Ações** da viagem.
-
-Não criar regras adicionais de preço ou cálculo por abastecimento sem aprovação.
-
-**Pontos para revisão, sem substituir as regras acima:**
-1. Combustível inicial e final convivem com o fato confirmado de que **nem sempre se sabe quanto resta no tanque**. Falta definir como esses valores são obtidos (Anexo A, P1).
-2. Também está confirmado que o abastecimento **nem sempre acontece antes da viagem**, e não está decidido onde registrar um abastecimento feito fora de viagem (Anexo A, P2).
-
-**[PROPOSTO, não adotado]** Em conversas anteriores surgiu um modelo de abastecimento ligado ao caminhão, com odômetro, marcação de tanque cheio e consumo estimado em janelas de registros. Ele não foi aprovado e não deve guiar a modelagem.
+- **[CONFIRMADO]** Dois combustíveis: **diesel e Arla**, independentes.
+- **[CONFIRMADO]** Abastecimento de diesel: data, litros e valor total pago. Vários abastecimentos parciais por viagem.
+- **[CONFIRMADO]** **Preço médio ponderado do diesel por viagem** = total pago nos abastecimentos de diesel da viagem ÷ total de litros.
+- **[CONFIRMADO]** Sem abastecimento na viagem, usar o **último preço médio conhecido daquele caminhão**. Sem histórico, **não inventar preço**: indicar a ausência de referência e não apresentar custo estimado como real.
+- **[CONFIRMADO]** O consumo médio (km/L) de cada percurso é **informado pelo computador de bordo**. Litros estimados = km ÷ consumo médio, separadamente para vazio e carregado.
+- **[CONFIRMADO]** Custo do diesel de cada percurso = litros estimados × preço médio. **Os valores pagos no diesel não são somados de novo como despesa**: isso seria dupla contagem.
+- **[CONFIRMADO]** Arla: data, litros e valor pago; **opcional**; entra como custo operacional pelo valor pago e não interfere no cálculo do diesel.
+- **[CONFIRMADO]** Não existe consumo fixo por caminhão. A capacidade do tanque é atributo do caminhão.
+- **[IMPLEMENTADO]** "Último preço conhecido" = média ponderada da viagem **anterior** mais recente do mesmo caminhão e da mesma empresa que teve diesel, em ordem de data de início e, no empate, de id. Uma viagem posterior nunca altera o preço de uma anterior.
+- **Substituído:** combustível inicial e final da viagem (antiga P1) deixou de ser usado.
+- **[PENDENTE]** Abastecimento fora de viagem (Anexo A, P2). Hoje todo abastecimento pertence a uma viagem.
 
 ### 2.4 Pedágios
 
 - **[CONFIRMADO]** Pedágios são **custo da viagem** e entram pelas **Ações** da viagem.
-- **[CONFIRMADO como objetivo]** Controle com **múltiplas praças, localidade e valor**.
-- **[PENDENTE]** Categoria/quantidade de eixos e descontos de tag. **Não modelar sem confirmação** (Anexo A, P6).
-- **[PROPOSTO]** Pedágios e custos extras na mesma tabela de despesas, com uma categoria.
+- **[CONFIRMADO 08/11/2026]** Cada pedágio tem **data e valor efetivamente pago**. Não há horário, valor original, desconto, porcentagem nem cálculo da tag. Eixos também não são modelados.
+- **[CONFIRMADO]** Despesas extras: **descrição, data e valor**. **Alimentação não é categoria de custo extra.** Manutenção não é despesa do frete.
+- **[IMPLEMENTADO]** Pedágios e despesas extras na tabela `despesas_viagem`, com `tipo` `PEDAGIO` ou `EXTRA`.
 
 ### 2.5 Fretes, receitas, despesas e rentabilidade
 
@@ -132,10 +127,12 @@ Não criar regras adicionais de preço ou cálculo por abastecimento sem aprova�
 - **[CONFIRMADO]** Custos considerados: **combustível, Arla, pedágios, custos extras e manutenção**.
 - **[CONFIRMADO]** **Seguro e parcelas do caminhão NÃO entram.**
 - **[CONFIRMADO]** **Manutenção** é uma tela de **histórico**, **não ligada a uma viagem**. O valor é **abatido da receita total do mês**. Há meses sem manutenção e meses com várias.
+- **[CONFIRMADO 08/11/2026]** Manutenções são despesas do caminhão e **não reduzem a margem de um frete específico**.
+- **[CONFIRMADO 08/11/2026]** Cada frete apresenta: receita, km vazios e carregados, custo de diesel vazio e carregado, Arla, pedágios, despesas extras, custo operacional total, lucro e margem percentual. **[IMPLEMENTADO]**
 - **[CONFIRMADO, protótipo]** Indicadores: Receita Total, Custos Totais, Lucro Líquido/Total, **Margem Média**, custo e lucro por km, Km Vazio, Rodado Vazio (R$), Consumo Médio.
 - **[CONFIRMADO]** Os números dos protótipos são **exemplos**, não dados reais.
-- **[PROPOSTO]** Lucro da viagem = `frete − combustível − Arla − pedágios − extras`. Manutenção entra no resultado **mensal**, sem rateio. Margem = lucro ÷ receita.
-- **[PROPOSTO]** Valores em `BigDecimal`/`numeric(15,2)`, nunca `double`; períodos no fuso `America/Sao_Paulo`.
+- **[IMPLEMENTADO]** Lucro do frete = `frete − diesel vazio − diesel carregado − Arla − pedágios − extras`; margem = lucro ÷ receita × 100. Fórmulas na seção 4.9. Manutenção entra no resultado **mensal**, sem rateio, quando o módulo existir.
+- **[IMPLEMENTADO]** Valores em `BigDecimal`/`numeric(15,2)`, nunca `double`; datas de "hoje" no fuso `America/Sao_Paulo`.
 - **[PROPOSTO]** Renomear a coluna "R$/Km" para "Lucro/km" (Anexo A, P10).
 - **[IDEIA FUTURA]** Tela de "acerto de contas".
 
@@ -180,6 +177,8 @@ Não criar regras adicionais de preço ou cálculo por abastecimento sem aprova�
 | Editar lançamentos | todos, sempre | os próprios, com a viagem em andamento |
 | Criar, alterar e excluir caminhões | sim | **não** |
 
+**[IMPLEMENTADO, provisório]** Todas as rotas de viagens exigem **DONO**; o MOTORISTA recebe `403`. Sem o vínculo motorista–caminhão (P12), liberar o MOTORISTA daria a ele acesso a todos os caminhões da empresa, contrariando a regra acima. A tabela de permissões continua sendo o alvo; a liberação depende da etapa 8 do roadmap.
+
 **[PROPOSTO]** Dono como opção de "motorista" nas viagens. **Menu:** dono: Dashboard, Caminhões, Viagens, Manutenções e Relatórios; motorista: Viagens. Um menu de Abastecimentos depende do Anexo A, P2.
 
 ### 2.8 Relatórios e dashboard
@@ -198,9 +197,9 @@ Não criar regras adicionais de preço ou cálculo por abastecimento sem aprova�
 
 ### 3.1 Escolhidas [CONFIRMADO]
 
-- Viagem como conjunto da operação, composta por **trechos**, com início e finalização.
-- Vários abastecimentos parciais por viagem, com combustível inicial e final.
-- Km carregado e vazio identificados por trecho.
+- **Cada frete é uma viagem independente**, com deslocamento vazio opcional atribuído a ele (08/11/2026, substitui "viagem composta por trechos").
+- Vários abastecimentos parciais por viagem; preço médio ponderado do diesel por viagem, com último preço do caminhão como alternativa.
+- Km vazio e carregado com consumo médio de cada um, vindo do computador de bordo.
 - **Manutenções** como histórico por caminhão, abatido no mês.
 - Dashboard do dono; Relatórios por último.
 - Perfis **DONO** e **MOTORISTA**; motorista vinculado ao caminhão, vendo só os seus.
@@ -224,7 +223,7 @@ Não criar regras adicionais de preço ou cálculo por abastecimento sem aprova�
 
 - Não colocar senhas, tokens ou segredos em conversas, commits ou documentos.
 - Não expor a porta 5432 publicamente só para testar a API.
-- Não iniciar **viagens antes de consolidar a base**: autenticação, controle de acesso, isolamento e testes.
+- Não iniciar **viagens antes de consolidar a base**: autenticação, controle de acesso, isolamento e testes. Em 08/11/2026, o responsável autorizou explicitamente o módulo de viagens antes das etapas 4, 7 e 8 do roadmap.
 
 ### 3.4 Não alterar sem autorização
 
@@ -240,7 +239,7 @@ Não criar regras adicionais de preço ou cálculo por abastecimento sem aprova�
 ### 3.5 Propostas sem decisão (não tratar como regra)
 
 - Status "Cancelada", auditoria de alterações e `@Version`.
-- Validações de viagem da seção 2.1.
+- Decisões do módulo de viagens listadas em P15 (Anexo A).
 - Tela de acerto de contas; renomear "R$/Km".
 - Flyway com `ddl-auto=validate`; CI no GitHub Actions; banco e perfil exclusivos de teste.
 - Proxy do Angular em vez de CORS.
@@ -281,14 +280,18 @@ Back_Frota_Mais/
     ├── main/java/br/com/frotamais/
     │   ├── BackendApplication.java
     │   ├── auth/       (AuthController, AuthService, LoginRequest, RegistroRequest, TokenResponse, ApiExceptionHandler)
+    │   ├── comum/      (RegraNegocioException)
     │   ├── caminhao/   (Caminhao, StatusCaminhao, CaminhaoRepository, CaminhaoRequest, CaminhaoResponse, CaminhaoService, CaminhaoController)
     │   ├── empresa/    (Empresa, EmpresaRepository)
     │   ├── seguranca/  (SecurityConfig, TokenService, UsuarioLogado)
-    │   └── usuario/    (Perfil, Usuario, UsuarioRepository)
+    │   ├── usuario/    (Perfil, Usuario, UsuarioRepository)
+    │   └── viagem/     (seção 4.9)
     ├── main/resources/application.properties
     ├── test/java/br/com/frotamais/
     │   ├── BackendApplicationTests.java
     │   ├── seguranca/  (SegurancaCaminhaoTest, IsolamentoEmpresaCaminhaoTest, AutenticacaoFluxoRealTest)
+    │   ├── viagem/     (ApiViagemTeste, CalculadoraRentabilidadeTest, ViagemFluxoTest, ViagemValidacaoTest,
+    │   │                IndicadoresViagemTest, IsolamentoEmpresaViagemTest, PermissaoViagemTest)
     │   └── suporte/    (GuardaBancoDeTeste, GuardaBancoDeTesteTest)
     └── test/resources/
         ├── config/application.properties    # fixa o banco frotamais_test
@@ -318,10 +321,10 @@ Back_Frota_Mais/
 | `usuarios` | id, nome, e-mail **único global**, senha_hash, perfil, ativo, empresa_id | [IMPLEMENTADO], unicidade **a mudar** (seção 4.5) |
 | `caminhoes` | id, empresa_id, placa, modelo, ano, status, capacidade_tanque_litros; único (empresa_id, placa) | [IMPLEMENTADO] |
 | vínculo motorista–caminhão | muitos-para-muitos, com ativo/inativo | [CONFIRMADO] como necessidade; desenho [PENDENTE] |
-| `viagens` | empresa_id, caminhão, motorista, início/fim, status, combustível inicial e final | [PROPOSTO] |
-| `trechos` | viagem, origem, destino, data, quilometragem, situação da carga | [CONFIRMADO] como conceito; colunas [PROPOSTO] |
-| `abastecimentos` | empresa_id, viagem, data, litros, valor, tipo diesel/Arla | [CONFIRMADO] como conceito; demais vínculos [PENDENTE] |
-| despesas da viagem | viagem, categoria (pedágio/extra), descrição, valor | [PROPOSTO] |
+| `viagens` | id, empresa_id, caminhao_id, status, origem, destino, data_inicio, data_fim, valor_frete, km_inicial_vazio, km_inicial_carregado, km_final_carregado, consumo_medio_vazio, consumo_medio_carregado, criado_por_id, criada_em, atualizada_em, finalizada_em | [IMPLEMENTADO] |
+| `abastecimentos` | id, viagem_id, tipo (DIESEL/ARLA), data, litros, valor_total, criado_por_id, criado_em | [IMPLEMENTADO]; empresa pela viagem |
+| `despesas_viagem` | id, viagem_id, tipo (PEDAGIO/EXTRA), descricao, data, valor, criado_por_id, criado_em | [IMPLEMENTADO]; empresa pela viagem |
+| `trechos` | — | **Descartado** em 08/11/2026 (cada frete é uma viagem) |
 | `manutencoes` | empresa_id, caminhão, data, descrição, valor | [PROPOSTO] |
 | (todas) | Isolamento por empresa em todas as consultas e operações, com vínculo direto à empresa ou por relacionamento com outra entidade que tenha esse vínculo. Os campos listados acima não tornam `empresa_id` obrigatório em toda entidade | [CONFIRMADO] |
 
@@ -355,6 +358,7 @@ A busca do login precisa considerar a identidade do usuário sem pressupor e-mai
 
 - **[CONFIRMADO]** Isolamento por empresa é **regra fundamental**. Um usuário não pode acessar dados de outra empresa sem autorização.
 - **[IMPLEMENTADO]** A filtragem por empresa está confirmada no **`CaminhaoRepository`** (`findAllByEmpresaId`, `findByIdAndEmpresaId`, `existsByEmpresaIdAndPlaca`). O `CaminhaoService` obtém o `empresaId` de `UsuarioLogado`, nunca do JSON. Recurso de outra empresa responde `404`.
+- **[IMPLEMENTADO]** Em viagens, toda consulta de `ViagemRepository` recebe o `empresaId`, e as de `AbastecimentoRepository` e `DespesaRepository` filtram por `viagem.empresa.id` **e** pelo id da viagem. Comprovado por `IsolamentoEmpresaViagemTest` com tokens reais (seção 4.9).
 - **Não é garantia geral.** `UsuarioRepository` e `EmpresaRepository` não filtram por empresa, e todo `JpaRepository` herda `findById`, `findAll` e `deleteById` sem filtro. O isolamento depende de cada serviço usar os métodos corretos.
 - **Toda funcionalidade nova deve garantir isolamento por empresa em todas as consultas e operações.** Não é obrigatório que toda entidade tenha a coluna `empresa_id`: o isolamento pode vir do vínculo direto com a empresa ou do relacionamento com outra entidade que tenha esse vínculo, desde que seja verificável e testado.
 
@@ -374,12 +378,104 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 - `DELETE` de caminhão apaga a linha do banco (Anexo A, P8).
 - `DB_PASSWORD` tem valor padrão; não há perfis `dev`/`prod`.
 - Não existe forma de criar MOTORISTA.
+- Erros de regra de negócio de viagens já usam `RegraNegocioException`, com mensagem no corpo (seção 4.9). Caminhões e autenticação continuam com `ResponseStatusException`.
 
 ### 4.8 Front-end e integrações
 
 - **Angular**, **responsivo**, foco em celular, exigindo internet. **[CONFIRMADO]** Há protótipos de 4 telas (Dashboard, Caminhões, Viagens, Relatórios). Faltam Login, pop-up "Nova viagem", menu de Ações, formulário de caminhão, Manutenções e trechos.
 - **CORS e proxy:** o código **não tem** configuração de CORS, e o `@CrossOrigin` foi removido do controller. **[PROPOSTO, não implementado]** Usar o proxy do Angular (`proxy.conf.json`, `/api` → `http://localhost:8080`, `ng serve --host 0.0.0.0`), porque no Codespaces a URL encaminhada muda. Sem proxy, o navegador será bloqueado.
 - **Integrações:** nenhuma confirmada.
+
+### 4.9 Módulo de viagens [IMPLEMENTADO em 08/11/2026]
+
+Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Repository. Regras de negócio nas seções 2.1 a 2.5.
+
+**Arquitetura**
+
+| Classe | Papel |
+|---|---|
+| `ViagemController`, `LancamentoController` | Rotas. `@PreAuthorize("hasRole('DONO')")` na classe inteira. |
+| `ViagemService` | Abertura, alteração, finalização, consulta e listagem. Valida um "estado candidato" antes de alterar a entidade. |
+| `LancamentoService` | Abastecimentos, pedágios e despesas extras. |
+| `RentabilidadeService` | Reúne, em poucas consultas filtradas pela empresa, os dados de um conjunto de viagens e chama a calculadora. |
+| `CalculadoraRentabilidade` | Função pura com todas as fórmulas. Não acessa banco, para ser testada isoladamente. |
+| `IndicadorService` | Totais por período. |
+| `RegraNegocioException` (`comum/`) | Erro de negócio com mensagem; tratado pelo `ApiExceptionHandler` no formato `{"status", "erro", "detalhes": [...]}`. |
+
+**Endpoints** (todos exigem token de um DONO; MOTORISTA → `403`; sem token → `401`; viagem, caminhão ou lançamento de outra empresa ou inexistente → `404`)
+
+| Método e rota | Corpo | Resposta |
+|---|---|---|
+| `GET /api/viagens?status=&caminhaoId=` | — | `200`, lista de `ViagemResumoResponse`, mais recentes primeiro |
+| `GET /api/viagens/{id}` | — | `200`, `ViagemResponse` com lançamentos e rentabilidade |
+| `POST /api/viagens` | `ViagemCriacaoRequest` | `201`, `ViagemResponse` |
+| `PUT /api/viagens/{id}` | `ViagemAtualizacaoRequest` | `200`, `ViagemResponse` |
+| `POST /api/viagens/{id}/finalizar` | `FinalizacaoRequest` | `200`, `ViagemResponse`; `409` se já finalizada |
+| `GET /api/viagens/indicadores?ano=&mes=&de=&ate=&caminhaoId=` | — | `200`, `IndicadoresResponse` |
+| `POST /api/viagens/{id}/abastecimentos` | `AbastecimentoRequest` | `201`, `AbastecimentoResponse` |
+| `PUT` / `DELETE /api/viagens/{id}/abastecimentos/{lancamentoId}` | `AbastecimentoRequest` / — | `200` / `204` |
+| `POST /api/viagens/{id}/pedagios` | `PedagioRequest` | `201`, `PedagioResponse` |
+| `PUT` / `DELETE /api/viagens/{id}/pedagios/{lancamentoId}` | `PedagioRequest` / — | `200` / `204` |
+| `POST /api/viagens/{id}/despesas-extras` | `DespesaExtraRequest` | `201`, `DespesaExtraResponse` |
+| `PUT` / `DELETE /api/viagens/{id}/despesas-extras/{lancamentoId}` | `DespesaExtraRequest` / — | `200` / `204` |
+
+`DELETE` de lançamento em viagem finalizada → `409`. Não existe `DELETE` de viagem.
+
+**DTOs de entrada** (datas `AAAA-MM-DD`; dinheiro com até 2 casas; km inteiro de 0 a 9.999.999; consumo em km/L, maior que 0 e até 99,99)
+
+| DTO | Campos |
+|---|---|
+| `ViagemCriacaoRequest` | `caminhaoId`*, `dataInicio`*, `origem`, `destino`, `valorFrete` (> 0), `kmInicialVazio`, `kmInicialCarregado`, `consumoMedioVazio`, `consumoMedioCarregado`. Exige ao menos um km inicial. |
+| `ViagemAtualizacaoRequest` | Os mesmos, sem `caminhaoId`, mais `dataFim` e `kmFinalCarregado`, aceitos só em viagem finalizada. Substitui todos os campos: campo ausente é apagado. |
+| `FinalizacaoRequest` | `dataFim`*, `kmFinalCarregado`*, `consumoMedioVazio`, `consumoMedioCarregado`. Consumo nulo mantém o já gravado. |
+| `AbastecimentoRequest` | `tipo`* (`DIESEL`/`ARLA`), `data`*, `litros`* (> 0, 3 casas), `valorTotal`* (> 0) |
+| `PedagioRequest` | `data`*, `valor`* (> 0) |
+| `DespesaExtraRequest` | `descricao`* (até 200), `data`*, `valor`* (> 0) |
+
+\* obrigatório. Nenhum DTO tem `empresaId`, status ou valor calculado; campos extras enviados pelo cliente são ignorados.
+
+**DTOs de saída**
+
+- `ViagemResponse`: dados da viagem, `kmFinalVazio` derivado, listas `abastecimentosDiesel`, `abastecimentosArla`, `pedagios`, `despesasExtras` e `rentabilidade`.
+- `ViagemResumoResponse`: id, caminhão, placa, status, rota, datas, frete, km vazio e carregado, custo total, lucro, margem e `calculoCompleto`.
+- `RentabilidadeResponse`: `receita`, `kmVazio`, `kmCarregado`, `litrosEstimadosVazio`, `litrosEstimadosCarregado`, `precoMedioDiesel`, `origemPrecoDiesel` (`ABASTECIMENTOS_DA_VIAGEM`, `ULTIMO_PRECO_DO_CAMINHAO`, `SEM_REFERENCIA`), `viagemReferenciaPrecoDieselId`, `custoDieselVazio`, `custoDieselCarregado`, `custoArla`, `pedagios`, `despesasExtras`, `custoOperacionalTotal`, `lucro`, `margemPercentual`, `calculoCompleto` e `pendencias`. Campo nulo significa "não calculável"; o motivo está em `pendencias`.
+- `IndicadoresResponse`: `de`, `ate`, `caminhaoId`, `criterioPeriodo` (`DATA_FIM`), `viagensFinalizadas`, `viagensConsideradas`, `viagensComCalculoIncompleto` (ids), os totais financeiros, `margemPercentual`, `kmVazio` e `kmCarregado`.
+
+**Cálculos** (`CalculadoraRentabilidade`)
+
+```text
+kmVazio            = kmInicialCarregado − kmInicialVazio      (0 se não houve vazio)
+kmCarregado        = kmFinalCarregado − kmInicialCarregado
+precoMedioDiesel   = Σ valor pago no diesel ÷ Σ litros de diesel   (da viagem; senão, da anterior do caminhão)
+litrosEstimados(p) = km(p) ÷ consumoMedio(p)                   (p = vazio ou carregado)
+custoDiesel(p)     = km(p) × Σ valor pago ÷ (consumoMedio(p) × Σ litros)
+custoOperacional   = custoDieselVazio + custoDieselCarregado + Arla + pedágios + despesas extras
+lucro              = valorFrete − custoOperacional
+margem (%)         = lucro ÷ valorFrete × 100
+```
+
+- O custo do diesel é calculado com uma única divisão e arredondado só no fim (2 casas, `HALF_UP`). Arredondar antes o preço e os litros pode mudar o resultado em centavos (há teste disso).
+- Exibição: preço médio com 4 casas, litros estimados com 3 casas, dinheiro e margem com 2.
+- Sem referência de preço, os custos de diesel, o custo total, o lucro e a margem ficam **nulos**, e `calculoCompleto = false`.
+- Arla, pedágios e extras entram pelo valor pago. Manutenção não entra.
+
+**Indicadores:** somam só fretes `FINALIZADA` com `dataFim` no período. Filtros: `ano`; `ano` e `mes`; ou `de`/`ate`, que cobre a semana sem o servidor definir "semana" (P7); sem filtro, todo o histórico; `caminhaoId` opcional. Fretes com cálculo incompleto ficam **fora de todos os totais** e são listados por id, para que um custo desconhecido nunca vire zero.
+
+**Validações**
+
+- Datas: início e fim não podem estar no futuro; fim ≥ início; todo lançamento precisa estar entre o início e o fim da viagem.
+- Km: `kmInicialCarregado > kmInicialVazio`; `kmFinalCarregado > kmInicialCarregado`; consumo vazio só com deslocamento vazio.
+- Finalização exige: frete, origem, destino, data final, km do carregamento, km final, consumo carregado e, se houve vazio, consumo vazio. A resposta lista tudo o que falta.
+- O caminhão precisa ser da empresa e estar `ATIVO`, sem outra viagem `EM_ANDAMENTO`.
+
+**Decisões técnicas**
+
+- **Concorrência:** abrir uma viagem bloqueia a linha do caminhão (`PESSIMISTIC_WRITE`), e toda alteração de viagem ou lançamento bloqueia a linha da viagem. Isso impede duas viagens abertas no mesmo caminhão e lançamentos simultâneos à finalização.
+- **Validar antes de alterar:** uma requisição recusada nunca deixa a entidade alterada pela metade.
+- **Isolamento sem `empresa_id` nos lançamentos:** abastecimentos e despesas herdam a empresa da viagem, e toda consulta deles filtra por `viagem.empresa.id`.
+- **Auditoria mínima:** `criado_por_id` e datas de criação e alteração. Ainda não há histórico de alterações.
+- **Enums com `CHECK` no banco:** o Hibernate criou `CHECK` para `status` e `tipo` (por exemplo, `viagens_status_check`). O `ddl-auto=update` **não altera** esse `CHECK`: um valor novo, como `CANCELADA`, vai exigir ajuste manual no banco ou migration (etapa 4 do roadmap).
+- **`ddl-auto=update`:** as três tabelas novas são criadas sozinhas. Até 08/11/2026, existiam só em `frotamais_test`; o banco `frotamais` as recebe na próxima vez que a API subir contra ele.
 
 ---
 
@@ -405,7 +501,8 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 | 02/11 | (sem commit) | Rotação do `JWT_SECRET` no Codespaces. Fluxo validado com a chave em uso; um token anterior à rotação **não foi testado** |
 | 02/11 | `f039e6a`, PR #1, merge `a4507bd` | `AutenticacaoFluxoRealTest`: 9 testes com o filtro real; a suíte passa a 14 testes |
 | 02/11 | `640e1e9`, PR #2, merge `bfd02ea` | Testes isolados em `frotamais_test`, com `GuardaBancoDeTeste`; a suíte passa a 17 testes |
-| 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF. Sem PR até esta revisão |
+| 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF; merge no PR #3 (`c9dcaf9`) |
+| 08/11 | branch `feat/viagens` | Módulo de viagens (seção 4.9), autorizado pelo responsável. Suíte com 56 testes. Sem push nem PR |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -438,8 +535,8 @@ Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
 
 ### 6.1 Último estado conhecido
 
-- **`main` local e no GitHub: `d0797b7` (02/11/2026).**
-- Codespaces em 02/11/2026: `## main...origin/main`, com `git diff --stat` vazio. **Não há evidência de divergência** entre o Codespace e o GitHub.
+- **`main` local e no GitHub: `c9dcaf9` (merge do PR #3).** Em 08/11/2026, o Codespace estava em `## main...origin/main`, sem alterações.
+- **Branch `feat/viagens`**, criada a partir de `c9dcaf9`, com o módulo de viagens. **Só local**: sem push, PR ou merge.
 
 ### 6.2 Implementado e nível de evidência
 
@@ -459,6 +556,10 @@ Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações f
 | `alg=none` e assinatura adulterada → `401` | Não | `curl` no backend em execução |
 | Validação do login → `400` | Não | `curl` no JAR |
 | Suíte com 17 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, no commit `8e4f719` | Não se aplica |
+| Viagens: cadastro, finalização, vazio no próximo frete, preço ponderado, último preço, sem referência, Arla, pedágios, extras, indicadores | `ViagemFluxoTest`, `CalculadoraRentabilidadeTest`, `IndicadoresViagemTest` | Não |
+| Viagens: isolamento entre empresas em todas as rotas, com tokens reais | `IsolamentoEmpresaViagemTest` | Não |
+| Viagens: MOTORISTA (perfil do banco) → `403`; sem token → `401` | `PermissaoViagemTest` | Só o `401`, com `curl` na API em execução contra `frotamais_test` |
+| Suíte com 56 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, na branch `feat/viagens` (08/11/2026) | Não se aplica |
 
 **Não comprovado:** não existe forma de criar MOTORISTA pela API, então um MOTORISTA criado pelo fluxo real nunca foi testado. O relato de 5 testes sem falhas em 30/10 continua **[NÃO VERIFICADO]**. A lista completa está na seção 6.4.
 
@@ -510,6 +611,7 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 - Registro de empresa com usuário DONO e login com JWT.
 - Validação do token e do usuário a cada requisição, com perfil lido do banco.
 - CRUD de caminhões com isolamento por empresa e escrita só para DONO.
+- Módulo de viagens (seção 4.9), só para DONO.
 
 **Testes existentes**
 
@@ -520,6 +622,12 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 | `IsolamentoEmpresaCaminhaoTest` | 1 | Duas empresas com tokens reais: listagem, consulta, alteração e exclusão entre empresas |
 | `AutenticacaoFluxoRealTest` | 9 | Filtro real: login, tokens recusados, usuário desativado e perfil lido do banco |
 | `GuardaBancoDeTesteTest` | 3 | Banco efetivo da suíte e recusa de outro banco |
+| `CalculadoraRentabilidadeTest` | 9 | Fórmulas sem banco: consumo separado, sem dupla contagem, Arla, sem preço, arredondamento, prejuízo |
+| `ViagemFluxoTest` | 13 | Fluxo HTTP completo dos fretes e lançamentos |
+| `ViagemValidacaoTest` | 10 | Recusas de dados, datas, km, estados e lançamentos |
+| `IndicadoresViagemTest` | 4 | Totais por mês, ano, intervalo e caminhão; exclusão dos incompletos |
+| `IsolamentoEmpresaViagemTest` | 1 | Todas as rotas de viagens entre duas empresas, com tokens reais |
+| `PermissaoViagemTest` | 2 | `401` sem token e `403` para MOTORISTA |
 
 **Alterações por PR**
 
@@ -557,13 +665,13 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 **Implementado**
 - Ambiente Codespaces + PostgreSQL.
 - Registro e login JWT, com perfis lidos do banco.
-- Isolamento por empresa em caminhões.
+- Isolamento por empresa em caminhões e viagens.
 - CRUD de caminhões, com escrita só para DONO.
-- 17 testes automatizados.
+- Módulo de viagens, na branch `feat/viagens`, aguardando revisão.
+- 56 testes automatizados.
 
 **Em desenvolvimento**
-- Alinhamento da documentação e configuração do modo de trabalho (`CLAUDE.md`).
-- Nenhuma funcionalidade está em desenvolvimento no código.
+- Revisão do módulo de viagens e das decisões listadas na seção 4.9 e no Anexo A.
 
 **Planejado:** seção 6.6.
 
@@ -581,9 +689,9 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 6. **Padrão de acesso por empresa** para todos os módulos novos.
 7. **Autenticação com o mesmo e-mail em empresas diferentes.** Depende de P11. O fluxo só é concluído com isso.
 8. **Vínculo motorista–caminhão e restrição de visualização.** Depende de P12. A restrição é implementada **antes** de disponibilizar a funcionalidade ao MOTORISTA, e só então o login dele é liberado.
-9. **Viagens e trechos.** Depende de P1 a P4.
-10. **Abastecimentos, despesas e manutenções.**
-11. **Rentabilidade e consumo.**
+9. **Viagens: implementada em 08/11/2026** (branch `feat/viagens`), por autorização do responsável, antes das etapas 4, 7 e 8. As regras de 08/11/2026 resolveram P1, P3, P4 e P5. O acesso do MOTORISTA continua dependendo da etapa 8.
+10. **Abastecimentos e despesas: implementados com as viagens.** Manutenções ainda não.
+11. **Rentabilidade por frete e indicadores por período: implementados.** Faltam custo e lucro por km e consumo médio agregado.
 12. **Dashboard.**
 13. **Relatórios**, por último.
 
@@ -607,19 +715,20 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 
 ## Anexo A. Pendências de decisão
 
-**Bloqueiam Viagens**
+**Resolvidas em 08/11/2026** pelas regras da seção 2.1 a 2.5
 
-- **P1. Combustível inicial e final:** como são obtidos, se nem sempre se sabe quanto resta no tanque? Em que unidade? Vale também para Arla? Qual a fórmula do consumo da viagem?
-- **P2. Abastecimento fora de viagem:** é permitido? Onde é lançado? Existirá menu "Abastecimentos"?
-- **P3. Frete e trechos:** uma viagem pode ter mais de um frete? A receita fica na viagem ou no trecho? Como a volta carregada entra na conta?
-- **P4. Quilometragem do trecho:** é digitada ou calculada por odômetro? O que a "rota" da lista mostra quando há vários trechos?
+- ~~P1.~~ Combustível inicial e final substituídos pelo consumo médio do computador de bordo.
+- ~~P3.~~ Cada frete é uma viagem; a receita é o valor do frete.
+- ~~P4.~~ Quilometragem por odômetro: saída vazia, carregamento e descarga.
+- ~~P5.~~ Rodado vazio = km vazio ÷ consumo vazio × preço médio do diesel.
+- ~~P6.~~ Pedágio = valor pago digitado; sem eixos nem desconto de tag.
 
-**Definem cálculos e telas**
+**Ainda abertas**
 
-- **P5.** Fórmula do "Rodado Vazio (R$)".
-- **P6.** Pedágios e eixos: valor digitado ou calculado? Eixos do caminhão, do conjunto ou da viagem? Desconto de tag?
-- **P7.** Definição de "semana" e limites do período.
-- **P8.** Excluir caminhão: apagar de fato ou apenas inativar? Viagem: status "Cancelada" ou exclusão? Auditoria desde o início?
+- **P2. Abastecimento fora de viagem:** é permitido? Onde é lançado? Existirá menu "Abastecimentos"? Hoje todo abastecimento pertence a uma viagem.
+- **P7.** Definição de "semana" e limites do período. Implementado como intervalo `de`/`ate` livre, aplicado à **data final** do frete: confirmar o critério.
+- **P8.** Excluir caminhão: apagar de fato ou apenas inativar? Viagem: status "Cancelada"? Hoje a viagem não pode ser excluída, e lançamentos só podem ser excluídos em viagem em andamento. Observação: `viagens.caminhao_id` tem chave estrangeira para `caminhoes` (conferido no banco), então o banco recusa apagar um caminhão com viagens. A resposta HTTP desse caso (`409` esperado, pelo `ApiExceptionHandler`) **não foi verificada**.
+- **P15.** Decisões do módulo de viagens a confirmar: uma viagem em andamento por caminhão; caminhão inativo não abre viagem; o dono corrige viagem finalizada pelo `PUT`; sem continuidade obrigatória do odômetro entre fretes; frete obrigatório só na finalização; fretes com cálculo incompleto fora dos totais.
 - **P9.** Senha inicial do motorista: gerada ou definida pelo dono? O dono aparece como motorista nas viagens?
 - **P10.** Renomear "R$/Km"? Em que etapa entra a exportação PDF/Excel?
 

@@ -39,7 +39,8 @@ Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frota
 
 - **Não enfraqueça esse isolamento:** não remova o guarda nem aponte os testes para `frotamais`.
 - **Não execute sem autorização explícita** testes que gravam dados permanentes no banco de desenvolvimento.
-- **Testes novos que gravam dados** devem usar `@Transactional`, para desfazer os registros ao final.
+- **Testes novos que gravam dados** devem usar `@Transactional`, para desfazer os registros ao final. Os testes de viagens herdam de `viagem/ApiViagemTeste`, que já faz isso e usa tokens reais.
+- **Armadilha do `@Transactional` no teste:** o serviço participa da transação do teste, então nada é gravado no banco até o fim do teste, e uma requisição recusada não sofre rollback antes da próxima chamada. Por isso os serviços validam antes de alterar a entidade. Erros que só aparecem na gravação, como uma FK violada, não são exercitados.
 
 ### `pom.xml`
 
@@ -54,17 +55,19 @@ Monólito Spring Boot 4.1.1 na raiz do repositório, com pacotes por funcionalid
 2. A cada requisição, o `conversor()` de `SecurityConfig` recarrega o usuário do banco, exige que esteja ativo e compara o `empresaId` do token com o do banco.
 3. As authorities `ROLE_*` vêm **do banco**, então desativar um usuário ou mudar o perfil vale na hora. A claim `perfil` não é usada para autorizar.
 
-**Isolamento por empresa:** os serviços obtêm o `empresaId` de `UsuarioLogado`, nunca do JSON, e consultam por métodos como `findByIdAndEmpresaId`. Recurso de outra empresa responde `404`. Isso só está garantido em `CaminhaoRepository`. `JpaRepository` herda `findById`, `findAll` e `deleteById` sem filtro, então o compilador não protege você. Toda funcionalidade nova precisa de isolamento verificável em todas as consultas e operações. A entidade pode ter vínculo direto com a empresa ou pertencer a outra entidade que tenha esse vínculo, desde que a segurança seja garantida e comprovada por teste de isolamento com tokens reais.
+**Isolamento por empresa:** os serviços obtêm o `empresaId` de `UsuarioLogado`, nunca do JSON, e consultam por métodos como `findByIdAndEmpresaId`. Recurso de outra empresa responde `404`. Isso está garantido em `CaminhaoRepository` e nos repositórios de `viagem/`; nos lançamentos (abastecimentos, pedágios, despesas), o filtro é `viagem.empresa.id`. `JpaRepository` herda `findById`, `findAll` e `deleteById` sem filtro, então o compilador não protege você. Toda funcionalidade nova precisa de isolamento verificável em todas as consultas e operações. A entidade pode ter vínculo direto com a empresa ou pertencer a outra entidade que tenha esse vínculo, desde que a segurança seja garantida e comprovada por teste de isolamento com tokens reais.
 
-**Erros seguem dois caminhos:** `ApiExceptionHandler` (em `auth/`, mas global) trata validação e `DataIntegrityViolationException`. `ResponseStatusException` e o restante passam pelo `/error` do Spring, com outro formato, e a mensagem provavelmente não chega ao cliente, porque `include-message` é `never` por padrão.
+**Erros seguem dois caminhos:** `ApiExceptionHandler` (em `auth/`, mas global) trata validação, `DataIntegrityViolationException` e `RegraNegocioException` (em `comum/`, com mensagem no corpo, no formato `{"status","erro","detalhes"}`). `ResponseStatusException` e o restante passam pelo `/error` do Spring, com outro formato, e a mensagem provavelmente não chega ao cliente, porque `include-message` é `never` por padrão. Código novo usa `RegraNegocioException`.
 
-**Schema:** `ddl-auto=update`, sem migrations. Remover uma restrição da entidade não a remove do banco.
+**Schema:** `ddl-auto=update`, sem migrations. Remover uma restrição da entidade não a remove do banco. O Hibernate cria `CHECK` para colunas `@Enumerated`, e o `update` não o altera: adicionar um valor a um enum persistido (por exemplo, `StatusViagem`) exige ajuste manual no banco.
+
+**Viagens (`viagem/`):** cada frete é uma viagem, com deslocamento vazio opcional atribuído a ele. As fórmulas financeiras ficam só em `CalculadoraRentabilidade`, uma função pura testada sem banco. Não some os valores pagos no diesel como custo: eles só definem o preço médio. Sem referência de preço, o custo fica nulo, nunca zero. O MOTORISTA recebe `403` em todas as rotas até existir o vínculo motorista–caminhão; não libere antes disso. Detalhes em `docs/CONTEXTO_FROTA_MAIS.md`, seção 4.9.
 
 **Spring Boot 4:** Jackson é 3.x (`tools.jackson.databind`), `@AutoConfigureMockMvc` fica em `org.springframework.boot.webmvc.test.autoconfigure` e `include-message` é `spring.web.error.*`. Não troque imports por memória do Boot 3.
 
 **Testes:** `jwt()` do `spring-security-test` contorna o `conversor()`. Um teste com ele prova o `@PreAuthorize`, não o fluxo real.
 
-**Lacunas conhecidas:** não existe criação de MOTORISTA nem vínculo motorista–caminhão, e o e-mail ainda é único global, embora a regra confirmada permita o mesmo e-mail em empresas diferentes. Não escreva código novo que dependa dessa unicidade.
+**Lacunas conhecidas:** não existe criação de MOTORISTA nem vínculo motorista–caminhão, e o e-mail ainda é único global, embora a regra confirmada permita o mesmo e-mail em empresas diferentes. Não escreva código novo que dependa dessa unicidade. Manutenções ainda não existem.
 
 ## Modo de trabalho
 
