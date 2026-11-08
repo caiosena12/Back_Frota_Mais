@@ -40,6 +40,7 @@ Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frota
 - **Não enfraqueça esse isolamento:** não remova o guarda nem aponte os testes para `frotamais`.
 - **Não execute sem autorização explícita** testes que gravam dados permanentes no banco de desenvolvimento.
 - **Testes novos que gravam dados** devem usar `@Transactional`, para desfazer os registros ao final. Os testes de viagens herdam de `viagem/ApiViagemTeste`, que já faz isso e usa tokens reais.
+- **Única exceção autorizada:** `viagem/ConcorrenciaViagemTest` desliga a transação do teste para gravar de verdade com requisições simultâneas, e no `@AfterEach` apaga só os registros da empresa que ele mesmo criou, depois de conferir `current_database()`. Não copie esse padrão sem nova autorização.
 - **Armadilha do `@Transactional` no teste:** o serviço participa da transação do teste, então nada é gravado no banco até o fim do teste, e uma requisição recusada não sofre rollback antes da próxima chamada. Por isso os serviços validam antes de alterar a entidade. Erros que só aparecem na gravação, como uma FK violada, não são exercitados.
 
 ### `pom.xml`
@@ -64,10 +65,12 @@ Monólito Spring Boot 4.1.1 na raiz do repositório, com pacotes por funcionalid
 **Viagens (`viagem/`):** cada frete é uma viagem, com deslocamento vazio opcional atribuído a ele. As fórmulas financeiras ficam só em `CalculadoraRentabilidade`, uma função pura testada sem banco. Não some os valores pagos no diesel como custo: eles só definem o preço médio. Sem referência de preço, o custo fica nulo, nunca zero. O MOTORISTA recebe `403` em todas as rotas até existir o vínculo motorista–caminhão; não libere antes disso. Detalhes em `docs/CONTEXTO_FROTA_MAIS.md`, seção 4.9.
 
 Invariantes que não podem ser quebrados:
-- **Períodos:** duas viagens do mesmo caminhão não se sobrepõem (datas inclusivas; em andamento = período aberto), e a checagem roda com o caminhão bloqueado.
+- **Períodos:** duas viagens do mesmo caminhão não se sobrepõem (datas inclusivas; em andamento = período aberto), e a checagem roda com o caminhão bloqueado. Única data compartilhável: o dia em que uma termina e a seguinte começa. Duas viagens não começam no mesmo dia, e por isso a data de início ordena as viagens do caminhão.
 - **Ordem de bloqueio:** sempre caminhão → viagem.
-- **Referência congelada:** frete finalizado usa a referência de preço gravada na finalização, e só uma correção explícita dele recalcula (`ViagemService.consolidarReferencia`). Nunca recalcule outros fretes finalizados.
-- **Plausibilidade:** os limites ficam em `app.viagens.limites.*` (`LimitesPlausibilidade`). Não espalhe constantes pelo código.
+- **Fotografia financeira:** frete finalizado devolve o resultado e a política de cálculo gravados na finalização (`ResultadoConsolidado`), sem recalcular. Só uma correção explícita dele regrava a fotografia, com a política atual (`ViagemService.consolidar`). Nunca recalcule outros fretes finalizados. Mudou uma fórmula? Troque `CalculadoraRentabilidade.VERSAO_POLITICA`.
+- **Preço de referência:** só de viagem que começou antes; nunca de uma posterior (vale para a viagem histórica).
+- **Plausibilidade:** os limites ficam em `app.viagens.limites.*` (`LimitesPlausibilidade`), lidos a cada operação por `PoliticaCalculo.limites()`. Não espalhe constantes pelo código. Arla não tem limite de preço nem de tanque.
+- **Viagem histórica** (`POST /api/viagens/historicas`): nasce finalizada, numa transação, com tudo validado antes de gravar.
 - **Viagem finalizada:** não aceita `POST` nem `DELETE` de lançamento.
 - **Caminhão:** com viagem aberta não é inativado; com histórico não é excluído.
 

@@ -86,14 +86,35 @@ Planejadas, **ainda sem código**:
 
 **Regras confirmadas na correção pós-auditoria (08/11/2026)** (seção 4.9):
 
-- **[CONFIRMADO][IMPLEMENTADO]** **Duas viagens do mesmo caminhão não podem ter períodos sobrepostos.** Vale para abertura, correção de datas e finalização, com viagens finalizadas ou em andamento. As datas são **inclusivas**: compartilhar um dia já é sobreposição. Uma viagem em andamento tem **período aberto** (sem fim). Resposta: `409`.
+- **[CONFIRMADO][IMPLEMENTADO]** **Duas viagens do mesmo caminhão não podem ter períodos sobrepostos.** Vale para abertura, cadastro histórico, correção de datas e finalização, com viagens finalizadas ou em andamento. As datas são **inclusivas**. Uma viagem em andamento tem **período aberto** (sem fim). Resposta: `409`.
+  - **Única data compartilhável [IMPLEMENTADO 08/11/2026, P19]:** uma viagem pode **começar no dia em que a anterior termina** (descarga do frete e saída vazia para o próximo no mesmo dia). Qualquer outro dia em comum é sobreposição, e **duas viagens do caminhão não podem começar no mesmo dia**. Antes desta mudança, compartilhar o dia da descarga também era recusado, o que impedia abrir o próximo frete no dia da descarga.
 - **[CONFIRMADO][IMPLEMENTADO]** **Depois da finalização, o dono só corrige lançamentos existentes** (`PUT`). Incluir (`POST`) ou excluir (`DELETE`) responde `409`. A correção não pode tirar o lançamento do período da viagem.
 - **[CONFIRMADO][IMPLEMENTADO]** Caminhão `INATIVO` não abre viagem, e caminhão com viagem em andamento não pode ser inativado (`409`).
 - **[IMPLEMENTADO]** Uma única viagem `EM_ANDAMENTO` por caminhão. Isso já decorre da regra de sobreposição, mas tem mensagem própria.
 - **[IMPLEMENTADO]** Viagem **não é excluída** (não existe `DELETE`).
 - **[IMPLEMENTADO]** O dono corrige viagem finalizada pelo `PUT`, que exige os mesmos dados completos da finalização. Não existe reabertura.
-- **Limitação conhecida:** os períodos usam **datas sem horário**. Por isso o mesmo caminhão **não pode ter dois contratos no mesmo dia**: o frete seguinte começa no dia seguinte à descarga. Permitir isso exige migrar `data_inicio` e `data_fim` para data e hora, o que não foi feito.
-- **Consequência da regra a confirmar (P16):** como a viagem nova nasce em andamento, com período aberto, **não é possível cadastrar uma viagem esquecida** com data anterior a fretes já existentes do caminhão.
+- **Limitação conhecida:** os períodos usam **datas sem horário**. Por isso dois fretes do caminhão não podem **começar** no mesmo dia, e um frete inteiro dentro de um único dia só cabe se nenhum outro começar nesse dia. Permitir mais exige migrar `data_inicio` e `data_fim` para data e hora, o que não foi feito.
+
+**Fluxo do deslocamento vazio [CONFIRMADO][IMPLEMENTADO 08/11/2026, P19]:** o deslocamento vazio e seus custos pertencem ao **próximo** frete, nunca ao anterior.
+
+1. O frete anterior termina na descarga e **deve ser finalizado nesse momento** (`POST /api/viagens/{id}/finalizar`).
+2. Ao sair vazio para buscar a próxima carga, **abre-se a nova viagem** (`POST /api/viagens`, com `kmInicialVazio`), inclusive no mesmo dia da descarga.
+3. Pedágios, diesel, Arla e demais despesas desse deslocamento são lançados **na nova viagem**.
+4. Os km vazios se acumulam até o carregamento, independentemente das cidades percorridas.
+5. No carregamento, informa-se `kmInicialCarregado` (`PUT`), e começa o percurso carregado.
+6. A nova viagem termina na descarga do novo frete.
+
+O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem como saber a qual frete o motorista pretendia atribuí-los. Enquanto o frete anterior não for finalizado, o caminhão não abre outra viagem (`409`), e o frete finalizado não aceita lançamentos novos (`409`); assim, um custo do vazio não cai por engano no frete anterior depois da finalização.
+
+**Cadastro de viagem histórica [CONFIRMADO][IMPLEMENTADO 08/11/2026, P16]** (`POST /api/viagens/historicas`, só DONO):
+
+- Serve para um frete **esquecido**, que já aconteceu. Nasce **finalizado**, numa única transação, com seus lançamentos. Nunca nasce em andamento: um período aberto no passado bloquearia todas as viagens posteriores do caminhão.
+- Exige os dados de uma viagem finalizada e aplica todas as validações: datas, odômetro, consumo, plausibilidade, capacidade do tanque, alimentação e período de cada lançamento.
+- Recusa (`409`) sobreposição com **qualquer** viagem do caminhão, inclusive em andamento.
+- Guarda as datas reais do percurso e, em `cadastroRetroativoEm`, quando o cadastro foi feito.
+- Preço do diesel: média dos abastecimentos próprios; sem eles, só uma referência **anterior ao início** da viagem histórica. Nunca o preço de uma viagem que ocorreu depois, mesmo já cadastrada. Sem referência anterior válida, o frete fica incompleto, sem custo de diesel inventado.
+- Não altera a fotografia financeira de nenhum frete já finalizado. Uma viagem **em andamento** posterior pode passar a usar o preço da viagem histórica, porque viagens em andamento são calculadas com os dados atuais.
+- Caminhão `INATIVO` não recebe viagem histórica (`409`), pela mesma regra da abertura (P20).
 - **[PENDENTE]** Status "Cancelada" (Anexo A, P8) e campo motorista na viagem (P9, P12).
 
 ### 2.2 Quilometragem carregada e vazia
@@ -115,16 +136,22 @@ Planejadas, **ainda sem código**:
 - **[CONFIRMADO]** Custo do diesel de cada percurso = litros estimados × preço médio. **Os valores pagos no diesel não são somados de novo como despesa**: isso seria dupla contagem.
 - **[CONFIRMADO]** Arla: data, litros e valor pago; **opcional**; entra como custo operacional pelo valor pago e não interfere no cálculo do diesel.
 - **[CONFIRMADO]** Não existe consumo fixo por caminhão. A capacidade do tanque é atributo do caminhão.
-- **[IMPLEMENTADO]** "Último preço conhecido" = média ponderada da viagem **anterior** mais recente do mesmo caminhão e da mesma empresa que teve diesel com preço **dentro dos limites de plausibilidade**, em ordem de data de início e, no empate, de id. Uma viagem posterior nunca altera o preço de uma anterior.
-- **[CONFIRMADO][IMPLEMENTADO] A referência de preço é congelada na finalização.** O frete grava os totais (valor pago e litros), a origem, a viagem de referência e o instante da consolidação. A partir daí, seu resultado **não muda** por viagens novas, correções em outros fretes ou abastecimentos de outras viagens.
-  - Só uma **correção explícita do próprio frete** recalcula a referência, e apenas dele: o `PUT` da viagem ou o `PUT` de um abastecimento de diesel dela. Outros fretes finalizados nunca são recalculados automaticamente.
-  - Corrigir Arla, pedágio ou despesa extra de um frete finalizado atualiza esses custos, mas **não** reabre a referência de preço.
+- **[IMPLEMENTADO]** "Último preço conhecido" = média ponderada da viagem mais recente do mesmo caminhão e da mesma empresa que **começou antes** do início desta e teve diesel com preço **dentro dos limites de plausibilidade**. Como duas viagens do caminhão não começam no mesmo dia, a data de início define a ordem sem empate. Uma viagem posterior nunca fornece preço a uma anterior.
+- **[CONFIRMADO][IMPLEMENTADO] A referência de preço é congelada na finalização.** O frete grava os totais (valor pago e litros), a origem, a viagem de referência e o instante da consolidação.
+  - Só uma **correção explícita do próprio frete** reavalia a referência, e apenas dele: o `PUT` da viagem ou o `PUT` de um abastecimento de diesel dela.
+  - Corrigir Arla, pedágio ou despesa extra de um frete finalizado **não** reavalia a referência de preço.
   - Viagem em andamento não tem referência congelada: o preço é calculado a cada consulta.
   - Motivo: na auditoria, uma viagem retroativa mudou o lucro de um frete finalizado de "sem referência" para R$ −280, e a correção do diesel de um frete mudou o lucro de outro de 40,00 para −120,00.
+- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P18] Fotografia financeira do frete finalizado.** Além da referência de preço, a finalização grava o **resultado completo** e a **política de cálculo** usada: limites de plausibilidade, versão das fórmulas (`rentabilidade-v1`), km, litros estimados, custos de diesel vazio e carregado, Arla, pedágios, despesas extras, custo total, lucro, margem, `calculoCompleto` e as pendências.
+  - A consulta do frete, a listagem e os indicadores **leem a fotografia**, sem recalcular. Mudar os limites globais, cadastrar outra viagem ou corrigir outro frete **não altera** o resultado de um frete finalizado.
+  - Uma **correção explícita** do frete pelo DONO (`PUT` da viagem ou de qualquer lançamento dele) regrava a fotografia **só desse frete**, com a política atual. Se, pela política atual, um valor gravado estiver fora dos limites, o frete passa a aparecer como incompleto, com o motivo: valores incompletos nunca são escondidos nem viram zero.
+  - Viagens em andamento continuam calculadas a cada consulta, com a política atual.
 - **[CONFIRMADO][IMPLEMENTADO] Limites de plausibilidade**, configuráveis (seção 4.9). Valores padrão: diesel de **R$ 1,00 a R$ 30,00 por litro** e consumo médio de **0,50 a 10,00 km/L**. São barreiras contra erro de digitação, não referências de mercado.
   - Entrada fora dos limites: `400`.
-  - Dado já gravado fora dos limites (por exemplo, após mudar a configuração): cálculo incompleto, com o motivo nas pendências. Nunca vira custo zero.
-- **[IMPLEMENTADO]** Diesel acima da **capacidade do tanque** responde `400`, se a capacidade estiver cadastrada no caminhão. Sem capacidade cadastrada, não há limite de litros: nenhuma capacidade é inventada. Arla não segue esse limite (tanque próprio).
+  - Dado gravado fora dos limites atuais numa **viagem em andamento**, ou num frete finalizado **corrigido** depois de uma mudança dos limites: cálculo incompleto, com o motivo nas pendências. Nunca vira custo zero. Um frete finalizado não corrigido mantém a fotografia feita com os limites da época.
+  - Os limites são configuráveis (`app.viagens.limites.*`, seção 4.9), e seus padrões não foram alterados em 08/11/2026.
+- **[IMPLEMENTADO]** Diesel acima da **capacidade do tanque** responde `400`, se a capacidade estiver cadastrada no caminhão. Sem capacidade cadastrada, não há limite de litros: nenhuma capacidade é inventada.
+- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P18] Arla:** exige litros e valor **positivos** (`400` caso contrário). Não há limite de preço por litro nem de consumo de Arla. A capacidade do tanque de **diesel** não se aplica ao Arla, e o caminhão não tem campo de capacidade do tanque de Arla; um limite só será aplicado quando existir um campo próprio e confiável.
 - **Substituído:** combustível inicial e final da viagem (antiga P1) deixou de ser usado.
 - **[PENDENTE]** Abastecimento fora de viagem (Anexo A, P2). Hoje todo abastecimento pertence a uma viagem.
 
@@ -133,7 +160,10 @@ Planejadas, **ainda sem código**:
 - **[CONFIRMADO]** Pedágios são **custo da viagem** e entram pelas **Ações** da viagem.
 - **[CONFIRMADO 08/11/2026]** Cada pedágio tem **data e valor efetivamente pago**. Não há horário, valor original, desconto, porcentagem nem cálculo da tag. Eixos também não são modelados.
 - **[CONFIRMADO]** Despesas extras: **descrição, data e valor**. **Alimentação não é categoria de custo extra.** Manutenção não é despesa do frete.
-- **[CONFIRMADO][IMPLEMENTADO 08/11/2026]** Despesa extra cuja descrição **contenha "alimentação"** é recusada (`400`) na inclusão e na correção. A comparação ignora acentos, maiúsculas e espaços extras. Outras palavras, como "refeição" ou "lanche", **não** são bloqueadas (P17).
+- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P17]** Despesa extra relacionada a alimentação é recusada (`400`) na inclusão, na correção e no cadastro histórico. A descrição é normalizada (sem acentos, minúscula, pontuação e espaços repetidos viram separador) e dividida em **palavras**. É recusada se alguma palavra for: alimentação, refeição, lanche, almoço, jantar, café (o que cobre "café da manhã"), restaurante, marmita ou comida, no singular ou no plural.
+  - A comparação é por **palavra inteira**, para não bloquear por acidente palavras que só contêm as letras de um termo: "Almoxarifado", "Cafeicultura", "Restauração do baú" e "Lanchas" são aceitas.
+  - Consequência: palavras fora da lista, como "lanchonete", "refeitório", "janta" ou "marmitex", **não** são bloqueadas; e "café" bloqueia também descrições sem relação com alimentação, como "descarga de café" (P17).
+  - Alimentação **não** é categoria de despesa permitida e nunca entra na rentabilidade.
 - **[IMPLEMENTADO]** Pedágios e despesas extras na tabela `despesas_viagem`, com `tipo` `PEDAGIO` ou `EXTRA`.
 
 ### 2.5 Fretes, receitas, despesas e rentabilidade
@@ -148,6 +178,12 @@ Planejadas, **ainda sem código**:
 - **[CONFIRMADO, protótipo]** Indicadores: Receita Total, Custos Totais, Lucro Líquido/Total, **Margem Média**, custo e lucro por km, Km Vazio, Rodado Vazio (R$), Consumo Médio.
 - **[CONFIRMADO]** Os números dos protótipos são **exemplos**, não dados reais.
 - **[IMPLEMENTADO]** Lucro do frete = `frete − diesel vazio − diesel carregado − Arla − pedágios − extras`; margem = lucro ÷ receita × 100. Fórmulas na seção 4.9. Manutenção entra no resultado **mensal**, sem rateio, quando o módulo existir.
+- **[CONFIRMADO][IMPLEMENTADO 08/11/2026, P15] Indicadores do período:**
+  - Os **totais oficiais** (receita, custos, lucro e margem) usam só fretes **finalizados com cálculo completo**.
+  - Fretes incompletos ficam fora desses totais e são apresentados à parte: quantidade, ids e a **soma informativa dos seus valores de frete**, identificada como não incluída nos indicadores oficiais.
+  - **Margem do período ponderada:** soma dos lucros dos fretes completos ÷ soma das receitas dos mesmos fretes × 100. Nunca a média simples das margens. Exemplo: fretes de R$ 1.000 (lucro 40, margem 4%) e R$ 4.000 (lucro 3.040, margem 76%) dão 61,60%, não 40%.
+  - **Semana:** de segunda-feira a domingo. Mês e ano seguem o calendário. Os filtros `de` e `ate` são inclusivos.
+  - Nenhum indicador inclui viagens de outra empresa.
 - **[IMPLEMENTADO]** Valores em `BigDecimal`/`numeric(15,2)`, nunca `double`; datas de "hoje" no fuso `America/Sao_Paulo`.
 - **[PROPOSTO]** Renomear a coluna "R$/Km" para "Lucro/km" (Anexo A, P10).
 - **[IDEIA FUTURA]** Tela de "acerto de contas".
@@ -206,7 +242,8 @@ Planejadas, **ainda sem código**:
 
 ### 2.8 Relatórios e dashboard
 
-- **[CONFIRMADO]** O **dashboard** aparece **por padrão para o dono**, com **lucro total** e **filtro por ano, mês e semana**.
+- **[CONFIRMADO]** O **dashboard** aparece **por padrão para o dono**, com **lucro total** e **filtro por ano, mês e semana**. **[IMPLEMENTADO]** Na API, `GET /api/viagens/indicadores` com `ano`, `ano`+`mes`, `semana` (segunda a domingo) ou `de`/`ate` (seção 4.9).
+- A margem do período na API é **ponderada** (seção 2.5). Falta confirmar se o card "Margem Média" dos protótipos deve exibir esse valor.
 - **[CONFIRMADO, protótipo]** Dashboard: cards **Receita Total, Custos Totais, Lucro Líquido, Caminhões Ativos**; gráfico de barras **Receitas vs Custos**; gráfico de rosca **Custos**.
 - **[CONFIRMADO]** **Relatórios são a última parte do desenvolvimento**, depois que tudo estiver calculado.
 - **[CONFIRMADO, protótipo]** Relatórios: cards Receita Total, Custos Totais, Lucro Total, Margem Média, **Rodado Vazio (R$)**, **Km Vazio** e **Consumo Médio**; tabela **Performance por Caminhão** (viagens, km total, receita, custos, lucro, margem, R$/km); tabela **Rentabilidade por Viagem** (caminhão, rota, data, receita, custos, lucro, margem).
@@ -262,7 +299,7 @@ Planejadas, **ainda sem código**:
 ### 3.5 Propostas sem decisão (não tratar como regra)
 
 - Status "Cancelada", auditoria de alterações e `@Version`.
-- Decisões do módulo de viagens listadas em P15 (Anexo A).
+- Decisões do módulo de viagens listadas em P7 e P20 (Anexo A).
 - Tela de acerto de contas; renomear "R$/Km".
 - Flyway com `ddl-auto=validate`; CI no GitHub Actions; banco e perfil exclusivos de teste.
 - Proxy do Angular em vez de CORS.
@@ -418,9 +455,12 @@ Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Reposito
 | Classe | Papel |
 |---|---|
 | `ViagemController`, `LancamentoController` | Rotas. `@PreAuthorize("hasRole('DONO')")` na classe inteira. |
-| `ViagemService` | Abertura, alteração, finalização, consulta e listagem. Valida um "estado candidato" antes de alterar a entidade. |
+| `ViagemService` | Abertura, cadastro histórico, alteração, finalização, consulta e listagem. Valida um "estado candidato" antes de alterar a entidade. Grava a fotografia financeira (`consolidar`). |
 | `LancamentoService` | Abastecimentos, pedágios e despesas extras. |
-| `RentabilidadeService` | Reúne, em poucas consultas filtradas pela empresa, os dados de um conjunto de viagens e chama a calculadora. Usa a referência congelada dos fretes finalizados e só consulta o histórico para viagens em andamento. |
+| `RegrasLancamento` | Validações puras dos lançamentos (período, plausibilidade do diesel, capacidade do tanque, alimentação), usadas pelos lançamentos e pelo cadastro histórico. |
+| `RentabilidadeService` | Devolve a fotografia dos fretes finalizados. Para viagens em andamento, reúne os dados em poucas consultas filtradas pela empresa e chama a calculadora com a política atual. |
+| `ResultadoConsolidado` | Fotografia financeira (`@Embeddable` em `Viagem`): resultado e política de cálculo gravados na finalização. |
+| `PoliticaCalculo` | Fornece os limites vigentes no momento de cada operação. |
 | `LimitesPlausibilidade`, `ViagemConfig` | Limites configuráveis de preço do diesel e de consumo (`app.viagens.limites.*`), validados na subida. |
 | `CalculadoraRentabilidade` | Função pura com todas as fórmulas. Não acessa banco, para ser testada isoladamente. |
 | `IndicadorService` | Totais por período. |
@@ -433,9 +473,10 @@ Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Reposito
 | `GET /api/viagens?status=&caminhaoId=` | — | `200`, lista de `ViagemResumoResponse`, mais recentes primeiro |
 | `GET /api/viagens/{id}` | — | `200`, `ViagemResponse` com lançamentos e rentabilidade |
 | `POST /api/viagens` | `ViagemCriacaoRequest` | `201`, `ViagemResponse` |
+| `POST /api/viagens/historicas` | `ViagemHistoricaRequest` | `201`, `ViagemResponse` finalizada, com `cadastroRetroativoEm` |
 | `PUT /api/viagens/{id}` | `ViagemAtualizacaoRequest` | `200`, `ViagemResponse` |
 | `POST /api/viagens/{id}/finalizar` | `FinalizacaoRequest` | `200`, `ViagemResponse`; `409` se já finalizada |
-| `GET /api/viagens/indicadores?ano=&mes=&de=&ate=&caminhaoId=` | — | `200`, `IndicadoresResponse` |
+| `GET /api/viagens/indicadores?ano=&mes=&semana=&de=&ate=&caminhaoId=` | — | `200`, `IndicadoresResponse` |
 | `POST /api/viagens/{id}/abastecimentos` | `AbastecimentoRequest` | `201`, `AbastecimentoResponse` |
 | `PUT` / `DELETE /api/viagens/{id}/abastecimentos/{lancamentoId}` | `AbastecimentoRequest` / — | `200` / `204` |
 | `POST /api/viagens/{id}/pedagios` | `PedagioRequest` | `201`, `PedagioResponse` |
@@ -443,7 +484,7 @@ Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Reposito
 | `POST /api/viagens/{id}/despesas-extras` | `DespesaExtraRequest` | `201`, `DespesaExtraResponse` |
 | `PUT` / `DELETE /api/viagens/{id}/despesas-extras/{lancamentoId}` | `DespesaExtraRequest` / — | `200` / `204` |
 
-Em viagem finalizada, `POST` e `DELETE` de lançamento → `409`; `PUT` é permitido, dentro do período da viagem. Período sobreposto ao de outra viagem do caminhão → `409`. Não existe `DELETE` de viagem.
+Em viagem finalizada, `POST` e `DELETE` de lançamento → `409`; `PUT` é permitido, dentro do período da viagem, e regrava a fotografia só daquele frete. Período sobreposto ao de outra viagem do caminhão → `409`. Não existe `DELETE` de viagem.
 
 Em caminhões: `PUT` que inativa caminhão com viagem em andamento → `409`; `DELETE` de caminhão com viagens → `409`.
 
@@ -454,6 +495,7 @@ Em caminhões: `PUT` que inativa caminhão com viagem em andamento → `409`; `D
 | `ViagemCriacaoRequest` | `caminhaoId`*, `dataInicio`*, `origem`, `destino`, `valorFrete` (> 0), `kmInicialVazio`, `kmInicialCarregado`, `consumoMedioVazio`, `consumoMedioCarregado`. Exige ao menos um km inicial. |
 | `ViagemAtualizacaoRequest` | Os mesmos, sem `caminhaoId`, mais `dataFim` e `kmFinalCarregado`, aceitos só em viagem finalizada. Substitui todos os campos: campo ausente é apagado. |
 | `FinalizacaoRequest` | `dataFim`*, `kmFinalCarregado`*, `consumoMedioVazio`, `consumoMedioCarregado`. Consumo nulo mantém o já gravado. |
+| `ViagemHistoricaRequest` | `caminhaoId`*, `dataInicio`*, `dataFim`*, `origem`*, `destino`*, `valorFrete`*, `kmInicialVazio`, `kmInicialCarregado`*, `kmFinalCarregado`*, `consumoMedioVazio` (obrigatório se houver vazio), `consumoMedioCarregado`*, e as listas `abastecimentos`, `pedagios` e `despesasExtras` (até 200 itens cada, nos formatos abaixo; ausente = vazia). |
 | `AbastecimentoRequest` | `tipo`* (`DIESEL`/`ARLA`), `data`*, `litros`* (> 0, 3 casas), `valorTotal`* (> 0) |
 | `PedagioRequest` | `data`*, `valor`* (> 0) |
 | `DespesaExtraRequest` | `descricao`* (até 200), `data`*, `valor`* (> 0) |
@@ -462,10 +504,10 @@ Em caminhões: `PUT` que inativa caminhão com viagem em andamento → `409`; `D
 
 **DTOs de saída**
 
-- `ViagemResponse`: dados da viagem, `kmFinalVazio` derivado, listas `abastecimentosDiesel`, `abastecimentosArla`, `pedagios`, `despesasExtras` e `rentabilidade`.
+- `ViagemResponse`: dados da viagem, `kmFinalVazio` derivado, `cadastroRetroativoEm` (preenchido em viagem histórica), listas `abastecimentosDiesel`, `abastecimentosArla`, `pedagios`, `despesasExtras` e `rentabilidade`.
 - `ViagemResumoResponse`: id, caminhão, placa, status, rota, datas, frete, km vazio e carregado, custo total, lucro, margem e `calculoCompleto`.
-- `RentabilidadeResponse`: `receita`, `kmVazio`, `kmCarregado`, `litrosEstimadosVazio`, `litrosEstimadosCarregado`, `precoMedioDiesel`, `origemPrecoDiesel` (`ABASTECIMENTOS_DA_VIAGEM`, `ULTIMO_PRECO_DO_CAMINHAO`, `SEM_REFERENCIA`), `viagemReferenciaPrecoDieselId`, `referenciaPrecoConsolidadaEm` (preenchido quando o preço está congelado), `custoDieselVazio`, `custoDieselCarregado`, `custoArla`, `pedagios`, `despesasExtras`, `custoOperacionalTotal`, `lucro`, `margemPercentual`, `calculoCompleto` e `pendencias`. Campo nulo significa "não calculável"; o motivo está em `pendencias`.
-- `IndicadoresResponse`: `de`, `ate`, `caminhaoId`, `criterioPeriodo` (`DATA_FIM`), `viagensFinalizadas`, `viagensConsideradas`, `viagensComCalculoIncompleto` (ids), os totais financeiros, `margemPercentual`, `kmVazio` e `kmCarregado`.
+- `RentabilidadeResponse`: `receita`, `kmVazio`, `kmCarregado`, `litrosEstimadosVazio`, `litrosEstimadosCarregado`, `precoMedioDiesel`, `origemPrecoDiesel` (`ABASTECIMENTOS_DA_VIAGEM`, `ULTIMO_PRECO_DO_CAMINHAO`, `SEM_REFERENCIA`), `viagemReferenciaPrecoDieselId`, `referenciaPrecoConsolidadaEm` (preenchido quando o preço está congelado), `custoDieselVazio`, `custoDieselCarregado`, `custoArla`, `pedagios`, `despesasExtras`, `custoOperacionalTotal`, `lucro`, `margemPercentual`, `calculoCompleto`, `pendencias`, `politicaCalculo` (`versao` e os quatro limites usados) e `resultadoConsolidadoEm` (preenchido quando é a fotografia de um frete finalizado; nulo em viagem em andamento). Campo nulo significa "não calculável"; o motivo está em `pendencias`.
+- `IndicadoresResponse`: `de`, `ate`, `caminhaoId`, `criterioPeriodo` (`DATA_FIM`), `viagensFinalizadas`, `viagensConsideradas`, `viagensIncompletas`, `viagensComCalculoIncompleto` (ids), `valorFreteIncompletasNaoIncluido` (informativo, fora de todos os totais), os totais financeiros oficiais, `margemPercentual` (ponderada), `kmVazio` e `kmCarregado`.
 
 **Cálculos** (`CalculadoraRentabilidade`)
 
@@ -484,19 +526,25 @@ margem (%)         = lucro ÷ valorFrete × 100
 - Exibição: preço médio com 4 casas, litros estimados com 3 casas, dinheiro e margem com 2.
 - Sem referência de preço, os custos de diesel, o custo total, o lucro e a margem ficam **nulos**, e `calculoCompleto = false`.
 - Preço médio ou consumo fora dos limites de plausibilidade: o custo afetado (e, com ele, o total, o lucro e a margem) fica nulo, com o motivo em `pendencias`. Litros e custo do percurso com consumo implausível também ficam nulos.
-- Fretes finalizados usam os totais congelados: `custoDiesel(p) = km(p) × valor pago congelado ÷ (consumoMedio(p) × litros congelados)`.
+- Fretes finalizados não são recalculados: a resposta é a fotografia gravada na finalização (ou na última correção explícita), com os limites e a versão da política daquele momento. Ao regravar a fotografia de um frete, `custoDiesel(p) = km(p) × valor pago congelado ÷ (consumoMedio(p) × litros congelados)`.
 - Arla, pedágios e extras entram pelo valor pago. Manutenção não entra.
 
-**Indicadores:** somam só fretes `FINALIZADA` com `dataFim` no período. Filtros: `ano`; `ano` e `mes`; ou `de`/`ate`, que cobre a semana sem o servidor definir "semana" (P7); sem filtro, todo o histórico; `caminhaoId` opcional. Fretes com cálculo incompleto ficam **fora de todos os totais** e são listados por id, para que um custo desconhecido nunca vire zero.
+**Indicadores:** somam a fotografia dos fretes `FINALIZADA` com `dataFim` no período. Filtros, um por vez: `ano`; `ano` e `mes` (calendário); `semana` (qualquer data da semana; o servidor usa de segunda a domingo); ou `de`/`ate`, inclusivos; sem filtro, todo o histórico; `caminhaoId` opcional. Fretes com cálculo incompleto ficam **fora de todos os totais oficiais**, para que um custo desconhecido nunca vire zero, e aparecem em `viagensIncompletas`, `viagensComCalculoIncompleto` e `valorFreteIncompletasNaoIncluido`.
+
+```text
+margemPercentual = Σ lucro (fretes completos) ÷ Σ receita (mesmos fretes) × 100
+```
 
 **Validações**
 
 - Datas: início e fim não podem estar no futuro; fim ≥ início; todo lançamento precisa estar entre o início e o fim da viagem.
 - Km: `kmInicialCarregado > kmInicialVazio`; `kmFinalCarregado > kmInicialCarregado`; consumo vazio só com deslocamento vazio.
 - Finalização exige: frete, origem, destino, data final, km do carregamento, km final, consumo carregado e, se houve vazio, consumo vazio. A resposta lista tudo o que falta.
-- O caminhão precisa ser da empresa e estar `ATIVO`, sem outra viagem `EM_ANDAMENTO` e sem viagem com período sobreposto.
+- O caminhão precisa ser da empresa e estar `ATIVO`, sem outra viagem `EM_ANDAMENTO` (na abertura) e sem viagem com período sobreposto. Única data compartilhável: o dia em que uma viagem termina e a seguinte começa; duas viagens não começam no mesmo dia.
+- Cadastro histórico: tudo o que a finalização exige, mais cada lançamento dentro do período, validado antes de gravar qualquer coisa.
 - Consumo dentro de `app.viagens.limites.consumo-*`; diesel com preço por litro dentro de `app.viagens.limites.preco-diesel-*` e litros até a capacidade do tanque, se cadastrada.
-- Despesa extra não pode conter "alimentação" na descrição.
+- Despesa extra não pode conter palavra de alimentação na descrição (seção 2.4).
+- Arla: litros e valor positivos, sem outros limites.
 
 **Configuração** (`application.properties`; podem ser sobrescritas por variável de ambiente, como `APP_VIAGENS_LIMITES_CONSUMO_MAXIMO`):
 
@@ -507,17 +555,19 @@ app.viagens.limites.consumo-minimo=0.50
 app.viagens.limites.consumo-maximo=10.00
 ```
 
-Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de subir (verificado: `APPLICATION FAILED TO START` com mensagem clara). Os limites são inclusivos.
+Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de subir (verificado: `APPLICATION FAILED TO START` com mensagem clara). Os limites são inclusivos. São proteções iniciais contra erro grosseiro de digitação, não médias obrigatórias de operação. Mudá-los vale para entradas novas, viagens em andamento e correções explícitas; a fotografia dos fretes finalizados guarda os limites com que foi calculada.
 
 **Decisões técnicas**
 
-- **Concorrência:** abrir uma viagem, alterar ou finalizar uma viagem, inativar ou excluir um caminhão bloqueiam a linha do caminhão (`PESSIMISTIC_WRITE`, que no PostgreSQL vira `SELECT ... FOR NO KEY UPDATE`). Alterar ou finalizar bloqueiam depois a linha da viagem, sempre nessa ordem. Lançamentos bloqueiam só a viagem. A checagem de sobreposição roda com o caminhão bloqueado, então duas requisições simultâneas não criam períodos sobrepostos. **Não há garantia equivalente no banco**: um índice parcial ou uma restrição de exclusão por período exigiriam migration (etapa 4). A concorrência real **não foi exercitada por teste**, porque isso exigiria gravar dados permanentes e apagá-los depois (ver 6.4).
-- **Referência congelada em colunas da própria viagem:** é a forma mais simples, porque o resto do cálculo (km, consumo, Arla, pedágios, extras e frete) já pertence ao frete e só muda por correção explícita dele.
+- **Concorrência:** abrir uma viagem, cadastrar uma viagem histórica, alterar ou finalizar uma viagem, inativar ou excluir um caminhão bloqueiam a linha do caminhão (`PESSIMISTIC_WRITE`, que no PostgreSQL vira `SELECT ... FOR NO KEY UPDATE`). Alterar ou finalizar bloqueiam depois a linha da viagem, sempre nessa ordem. Lançamentos bloqueiam só a viagem. A checagem de sobreposição roda com o caminhão bloqueado. **Testado com concorrência real** em `ConcorrenciaViagemTest` (8 requisições simultâneas, com commit em `frotamais_test`): só uma vence e as outras recebem `409`. Sem o bloqueio, as 8 venceram (mutação temporária, desfeita). **Não há garantia equivalente no banco**: um índice parcial ou uma restrição de exclusão por período exigiriam migration (etapa 4).
+- **Fotografia financeira em colunas da própria viagem** (`@Embeddable ResultadoConsolidado`, colunas `res_*`, `limite_*`, `politica_calculo_versao`, `resultado_consolidado_em`): é a forma mais simples, porque é lida junto com a viagem, sem outra tabela nem consulta. As pendências ficam em texto, uma por linha. Dois instantes distintos: `referencia_consolidada_em` (preço do diesel) e `resultado_consolidado_em` (resultado), porque corrigir um pedágio regrava o resultado sem reavaliar o preço.
+- **Política vigente consultada a cada operação** (`PoliticaCalculo.limites()`), em vez de guardada nos serviços. O teste da fotografia troca esse retorno para simular a mudança de configuração.
+- **Versão da política:** `CalculadoraRentabilidade.VERSAO_POLITICA` (`rentabilidade-v1`). Deve mudar sempre que uma fórmula ou regra de pendência mudar.
 - **Validar antes de alterar:** uma requisição recusada nunca deixa a entidade alterada pela metade.
 - **Isolamento sem `empresa_id` nos lançamentos:** abastecimentos e despesas herdam a empresa da viagem, e toda consulta deles filtra por `viagem.empresa.id`.
 - **Auditoria mínima:** `criado_por_id` e datas de criação e alteração. Ainda não há histórico de alterações.
 - **Enums com `CHECK` no banco:** o Hibernate criou `CHECK` para `status` e `tipo` (por exemplo, `viagens_status_check`). O `ddl-auto=update` **não altera** esse `CHECK`: um valor novo, como `CANCELADA`, vai exigir ajuste manual no banco ou migration (etapa 4 do roadmap).
-- **`ddl-auto=update`:** as três tabelas novas são criadas sozinhas. Até 08/11/2026, existiam só em `frotamais_test`; o banco `frotamais` as recebe na próxima vez que a API subir contra ele.
+- **`ddl-auto=update`:** as três tabelas novas e as colunas da fotografia (todas anuláveis) são criadas sozinhas. Até 08/11/2026, existiam só em `frotamais_test`; o banco `frotamais` as recebe na próxima vez que a API subir contra ele.
 
 ---
 
@@ -546,6 +596,7 @@ Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de sub
 | 02/11 | `5461d6f`, `b090674`, `1d2b4bb`, branch `chore/base-confiavel` | Limpeza de dependências, causa e correção da falha do `pom.xml` com CRLF; merge no PR #3 (`c9dcaf9`) |
 | 08/11 | branch `feat/viagens` | Módulo de viagens (seção 4.9), autorizado pelo responsável. Suíte com 56 testes. Sem push nem PR |
 | 08/11 | branch `feat/viagens` | Auditoria e correções: sobreposição de períodos, referência de preço congelada, limites de plausibilidade, bloqueio de lançamentos após a finalização, alimentação, proteção de caminhões. Suíte com 85 testes |
+| 08/11 | branch `feat/viagens` | Segunda auditoria (P15 a P19): fotografia financeira do frete finalizado, viagem histórica, palavras de alimentação, Arla, dia de fronteira entre fretes, indicadores ponderados e por semana, teste real de concorrência. Suíte com 106 testes |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -605,6 +656,11 @@ Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações f
 | Suíte com 56 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, na branch `feat/viagens` (08/11/2026) | Não se aplica |
 | Correções da auditoria: sobreposição, referência congelada (cenários A2 e A3), plausibilidade, lançamentos após finalização, alimentação, caminhões | `SobreposicaoViagemTest`, `ReferenciaCongeladaTest`, `PlausibilidadeViagemTest`, `CalculadoraRentabilidadeTest`, `LancamentoViagemFinalizadaTest`, `AlimentacaoDespesaTest`, `CaminhaoHistoricoTest` | Subida da API com limites inválidos recusada |
 | Suíte com 85 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test`, após as correções (08/11/2026) | Não se aplica |
+| Fotografia financeira estável com mudança de limites; correção explícita recalcula só o frete corrigido | `FotografiaFinanceiraTest` | Não |
+| Viagem histórica: válida, sobreposição, referência anterior, referência posterior, sem referência, validações, isolamento e permissão | `ViagemHistoricaTest` | Não |
+| Alimentação por palavra, Arla, fluxo do deslocamento vazio, indicadores ponderados e por semana | `AlimentacaoDespesaTest`, `ArlaViagemTest`, `DeslocamentoVazioTest`, `IndicadoresPonderadosTest` | Não |
+| Concorrência real: 8 aberturas e 8 cadastros históricos simultâneos, só um vence | `ConcorrenciaViagemTest` (commit real em `frotamais_test`, limpeza só da empresa do teste) | Mutação sem o bloqueio: as 8 venceram |
+| Suíte com 106 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test` (08/11/2026) | Não se aplica |
 
 **Não comprovado:** não existe forma de criar MOTORISTA pela API, então um MOTORISTA criado pelo fluxo real nunca foi testado. O relato de 5 testes sem falhas em 30/10 continua **[NÃO VERIFICADO]**. A lista completa está na seção 6.4.
 
@@ -668,11 +724,17 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 | `AutenticacaoFluxoRealTest` | 9 | Filtro real: login, tokens recusados, usuário desativado e perfil lido do banco |
 | `GuardaBancoDeTesteTest` | 3 | Banco efetivo da suíte e recusa de outro banco |
 | `CalculadoraRentabilidadeTest` | 14 | Fórmulas sem banco: consumo separado, sem dupla contagem, Arla, sem preço, arredondamento, prejuízo, limites de plausibilidade |
-| `SobreposicaoViagemTest` | 5 | Períodos sobrepostos (total, interno, parcial, dia compartilhado), período aberto, odômetro reiniciado |
+| `SobreposicaoViagemTest` | 5 | Períodos sobrepostos (total, interno, parcial, mesmo dia de início), dia de fronteira aceito, período aberto, odômetro reiniciado |
 | `ReferenciaCongeladaTest` | 4 | Cenários A2 e A3 da auditoria; correção explícita recalcula só o frete corrigido |
 | `PlausibilidadeViagemTest` | 4 | Preço e consumo fora dos limites, capacidade do tanque, referência histórica implausível |
 | `LancamentoViagemFinalizadaTest` | 5 | `POST` e `DELETE` recusados nos quatro tipos; `PUT` do dono; MOTORISTA recusado |
-| `AlimentacaoDespesaTest` | 2 | Variações de "alimentação" recusadas na inclusão e na correção |
+| `AlimentacaoDespesaTest` | 5 | Termos de alimentação por palavra, sem bloqueio por correspondência parcial, na inclusão e na correção |
+| `ArlaViagemTest` | 1 | Arla: litros e valor positivos, sem limite de preço nem do tanque de diesel |
+| `FotografiaFinanceiraTest` | 4 | Fotografia gravada, estável com mudança de limites; correção explícita só do frete corrigido |
+| `ViagemHistoricaTest` | 7 | Cadastro retroativo finalizado, sobreposição, referência anterior e posterior, sem referência, validações, isolamento e permissão |
+| `DeslocamentoVazioTest` | 1 | Próximo frete aberto no dia da descarga recebe os custos do vazio |
+| `IndicadoresPonderadosTest` | 3 | Margem ponderada, incompletos à parte, semana de segunda a domingo, mês e intervalo, outra empresa |
+| `ConcorrenciaViagemTest` | 2 | Requisições simultâneas reais (com commit) no mesmo caminhão |
 | `CaminhaoHistoricoTest` | 4 | Inativação com viagem aberta e exclusão com histórico recusadas |
 | `ViagemFluxoTest` | 13 | Fluxo HTTP completo dos fretes e lançamentos |
 | `ViagemValidacaoTest` | 10 | Recusas de dados, datas, km, estados e lançamentos |
@@ -701,7 +763,7 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 
 **Ainda não comprovado**
 
-- Concorrência real na abertura de viagens e na sobreposição de períodos: garantida pelo bloqueio do caminhão (SQL `FOR NO KEY UPDATE` confirmado no log), sem teste com duas transações gravando de verdade.
+- Concorrência real em alteração de datas e finalização (testada só na abertura e no cadastro histórico).
 - Conversão em `409` da violação de chave estrangeira ao excluir caminhão: o caminho existe no código, mas não há teste que force a corrida.
 
 - `PUT` e `DELETE` no fluxo feliz; `400` de validação e `409` de placa duplicada em caminhões.
@@ -721,8 +783,8 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 - Registro e login JWT, com perfis lidos do banco.
 - Isolamento por empresa em caminhões e viagens.
 - CRUD de caminhões, com escrita só para DONO.
-- Módulo de viagens e correções da auditoria, na branch `feat/viagens`, aguardando revisão.
-- 85 testes automatizados.
+- Módulo de viagens, correções da auditoria e ajustes da segunda auditoria, na branch `feat/viagens`, aguardando revisão.
+- 106 testes automatizados.
 
 **Em desenvolvimento**
 - Revisão do módulo de viagens e das decisões listadas na seção 4.9 e no Anexo A.
@@ -743,7 +805,7 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 6. **Padrão de acesso por empresa** para todos os módulos novos.
 7. **Autenticação com o mesmo e-mail em empresas diferentes.** Depende de P11. O fluxo só é concluído com isso.
 8. **Vínculo motorista–caminhão e restrição de visualização.** Depende de P12. A restrição é implementada **antes** de disponibilizar a funcionalidade ao MOTORISTA, e só então o login dele é liberado.
-9. **Viagens: implementada em 08/11/2026** (branch `feat/viagens`), por autorização do responsável, antes das etapas 4, 7 e 8. As regras de 08/11/2026 resolveram P1, P3, P4 e P5. O acesso do MOTORISTA continua dependendo da etapa 8.
+9. **Viagens: implementada em 08/11/2026** (branch `feat/viagens`), por autorização do responsável, antes das etapas 4, 7 e 8. As regras de 08/11/2026 resolveram P1, P3 a P6 e P15 a P19. O acesso do MOTORISTA continua dependendo da etapa 8.
 10. **Abastecimentos e despesas: implementados com as viagens.** Manutenções ainda não.
 11. **Rentabilidade por frete e indicadores por período: implementados.** Faltam custo e lucro por km e consumo médio agregado.
 12. **Dashboard.**
@@ -777,16 +839,24 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 - ~~P5.~~ Rodado vazio = km vazio ÷ consumo vazio × preço médio do diesel.
 - ~~P6.~~ Pedágio = valor pago digitado; sem eixos nem desconto de tag.
 
+**Resolvidas em 08/11/2026** na segunda auditoria (seções 2.1 a 2.5 e 4.9)
+
+- ~~P15.~~ Só fretes finalizados e completos nos totais oficiais; incompletos à parte, com soma informativa do frete; margem do período ponderada; semana de segunda a domingo. A ordem de viagens no mesmo dia deixou de existir: duas viagens do caminhão não começam no mesmo dia.
+- ~~P16.~~ Viagem esquecida: cadastro histórico já finalizado (`POST /api/viagens/historicas`), só DONO, com preço só de referência anterior.
+- ~~P17.~~ Alimentação: lista de palavras, por palavra inteira.
+- ~~P18.~~ Padrões dos limites mantidos; Arla sem limite de preço ou consumo; fotografia financeira guarda a política usada, e mudar limites não altera fretes finalizados.
+- ~~P19.~~ Custos do vazio pertencem ao próximo frete; o próximo frete pode começar no dia da descarga; nada é transferido automaticamente.
+
 **Ainda abertas**
 
 - **P2. Abastecimento fora de viagem:** é permitido? Onde é lançado? Existirá menu "Abastecimentos"? Hoje todo abastecimento pertence a uma viagem.
-- **P7.** Definição de "semana" e limites do período. Implementado como intervalo `de`/`ate` livre, aplicado à **data final** do frete: confirmar o critério.
+- **P7.** Semana definida (segunda a domingo, P15). Falta confirmar o critério de período: hoje o frete entra no período pela **data final** (descarga).
 - **P8.** Excluir caminhão **sem** viagens: apagar de fato ou apenas inativar? Com viagens, a exclusão já é recusada (`409`, testado). Viagem: status "Cancelada"? Hoje a viagem não pode ser excluída, e lançamentos só podem ser excluídos em viagem em andamento.
-- **P15.** Decisões do módulo de viagens ainda a confirmar: frete obrigatório só na finalização; fretes com cálculo incompleto fora de **todos** os totais, inclusive da receita; margem do período ponderada (lucro total ÷ receita total) ou média das margens; ordem de duas viagens no mesmo dia pelo id (raro, porque a regra de sobreposição já impede). **Confirmadas em 08/11/2026:** uma viagem em andamento por caminhão (via não sobreposição), caminhão inativo não abre viagem, odômetro sem continuidade entre fretes e lançamentos só corrigidos após a finalização.
-- **P16.** Como cadastrar uma **viagem esquecida**, com data anterior a fretes já existentes do caminhão? A regra do período aberto impede isso hoje. Opções: criar a viagem já finalizada (com data final) ou outra regra.
-- **P17.** A regra da alimentação deve cobrir sinônimos ("refeição", "lanche", "almoço")? Hoje bloqueia só o termo "alimentação".
-- **P18.** Limites de plausibilidade: os padrões (R$ 1,00 a 30,00/L; 0,50 a 10,00 km/L) servem? Deve haver limite para Arla? Se um limite mudar depois, fretes antigos fora dele passam a aparecer como incompletos (sem mudar valores). Isso é desejado?
-- **P19.** Pedágio ou despesa do deslocamento vazio lançados enquanto o frete anterior ainda está aberto (esquecido) caem no frete errado. Vale mitigar?
+- **P20.** Detalhes do módulo de viagens ainda a confirmar:
+  - Valor do frete exigido só na finalização (hoje é opcional na abertura).
+  - Caminhão `INATIVO` pode receber **viagem histórica** de quando estava ativo? Hoje não (`409`), pela regra da abertura.
+  - Alimentação: bloquear também "lanchonete", "refeitório", "janta", "marmitex"? Aceitar que "café" bloqueie descrições como "descarga de café"?
+  - Capacidade do tanque de Arla: criar um campo no caminhão para limitar os litros de Arla?
 - **P9.** Senha inicial do motorista: gerada ou definida pelo dono? O dono aparece como motorista nas viagens?
 - **P10.** Renomear "R$/Km"? Em que etapa entra a exportação PDF/Excel?
 
