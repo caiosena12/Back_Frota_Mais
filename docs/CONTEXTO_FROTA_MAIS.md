@@ -596,6 +596,8 @@ Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de sub
 | 08/11 | branch `feat/viagens` | Módulo de viagens (seção 4.9), autorizado pelo responsável. Suíte com 56 testes. Sem push nem PR |
 | 08/11 | branch `feat/viagens` | Auditoria e correções: sobreposição de períodos, referência de preço congelada, limites de plausibilidade, bloqueio de lançamentos após a finalização, alimentação, proteção de caminhões. Suíte com 85 testes |
 | 08/11 | branch `feat/viagens` | Segunda auditoria (P15 a P19): fotografia financeira do frete finalizado, viagem histórica, despesas extras livres (bloqueio de alimentação removido), Arla, dia de fronteira entre fretes, indicadores ponderados e por semana, teste real de concorrência. Suíte com 106 testes |
+| 08/11 | `0727d16` | Despesas extras livres: bloqueio de alimentação removido (P17). Suíte com 104 testes |
+| 08/11 | `main` | Auditoria final e push de `feat/viagens` para a `main` (fast-forward) |
 
 ### 5.2 Problemas encontrados e soluções
 
@@ -628,8 +630,8 @@ Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de sub
 
 ### 6.1 Último estado conhecido
 
-- **`main` local e no GitHub: `c9dcaf9` (merge do PR #3).** Em 08/11/2026, o Codespace estava em `## main...origin/main`, sem alterações.
-- **Branch `feat/viagens`**, criada a partir de `c9dcaf9`, com o módulo de viagens. **Só local**: sem push, PR ou merge.
+- **Branch `feat/viagens`**, criada a partir de `c9dcaf9` (merge do PR #3), com o módulo de viagens, as correções das duas auditorias e as despesas extras livres.
+- **Auditoria final em 08/11/2026:** 104 testes, 0 falhas, em duas execuções seguidas em `frotamais_test`; API iniciada contra `frotamais_test` respondendo `401` sem token. Depois disso, a `main` foi avançada até `feat/viagens` (fast-forward, sem PR), por autorização do responsável, e enviada ao GitHub.
 
 ### 6.2 Implementado e nível de evidência
 
@@ -660,6 +662,7 @@ Conferido nos testes em 02/11/2026. A coluna manual se refere a verificações f
 | Despesas extras livres, Arla, fluxo do deslocamento vazio, indicadores ponderados e por semana | `DespesaExtraLivreTest`, `ArlaViagemTest`, `DeslocamentoVazioTest`, `IndicadoresPonderadosTest` | Não |
 | Concorrência real: 8 aberturas e 8 cadastros históricos simultâneos, só um vence | `ConcorrenciaViagemTest` (commit real em `frotamais_test`, limpeza só da empresa do teste) | Mutação sem o bloqueio: as 8 venceram |
 | Suíte com 106 testes, 0 falhas e 0 erros | `./mvnw test` em `frotamais_test` (08/11/2026) | Não se aplica |
+| Suíte com 104 testes, 0 falhas e 0 erros (após despesas extras livres; auditoria final, duas execuções) | `./mvnw clean test` em `frotamais_test` (08/11/2026) | API em execução contra `frotamais_test`: `401` sem token nas rotas novas |
 
 **Não comprovado:** não existe forma de criar MOTORISTA pela API, então um MOTORISTA criado pelo fluxo real nunca foi testado. O relato de 5 testes sem falhas em 30/10 continua **[NÃO VERIFICADO]**. A lista completa está na seção 6.4.
 
@@ -782,11 +785,11 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 - Registro e login JWT, com perfis lidos do banco.
 - Isolamento por empresa em caminhões e viagens.
 - CRUD de caminhões, com escrita só para DONO.
-- Módulo de viagens, correções da auditoria e ajustes da segunda auditoria, na branch `feat/viagens`, aguardando revisão.
-- 106 testes automatizados.
+- Módulo de viagens, correções das auditorias e despesas extras livres, na `main` desde 08/11/2026.
+- 104 testes automatizados.
 
 **Em desenvolvimento**
-- Revisão do módulo de viagens e das decisões listadas na seção 4.9 e no Anexo A.
+- Decisões ainda abertas do Anexo A (P7, P8, P20 e seguintes).
 
 **Planejado:** seção 6.6.
 
