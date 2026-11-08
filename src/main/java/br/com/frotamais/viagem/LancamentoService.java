@@ -1,10 +1,6 @@
 package br.com.frotamais.viagem;
 
-import java.math.BigDecimal;
-import java.math.MathContext;
-import java.text.Normalizer;
 import java.time.LocalDate;
-import java.util.Locale;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -144,41 +140,13 @@ public class LancamentoService {
     }
 
     private static void validarData(Viagem v, LocalDate data) {
-        if (data.isAfter(ViagemService.hoje())) {
-            throw RegraNegocioException.invalido("A data do lançamento não pode estar no futuro.");
-        }
-        if (data.isBefore(v.getDataInicio())) {
-            throw RegraNegocioException.invalido(
-                    "A data do lançamento não pode ser anterior ao início da viagem.");
-        }
-        if (v.getDataFim() != null && data.isAfter(v.getDataFim())) {
-            throw RegraNegocioException.invalido(
-                    "A data do lançamento não pode ser posterior ao fim da viagem.");
-        }
+        RegrasLancamento.validarData(v.getDataInicio(), v.getDataFim(), data);
         v.marcarAlteracao();
     }
 
-    /**
-     * Diesel: preço por litro dentro dos limites de plausibilidade e, se o
-     * caminhão tiver capacidade do tanque cadastrada, litros até essa capacidade.
-     * Sem capacidade cadastrada não há limite de litros. Arla tem tanque próprio
-     * e não é limitado pela capacidade do tanque de diesel.
-     */
+    /** Ver RegrasLancamento.validarAbastecimento. */
     private void validarAbastecimento(Viagem v, AbastecimentoRequest req) {
-        if (req.tipo() != TipoCombustivel.DIESEL) {
-            return;
-        }
-        BigDecimal precoLitro = req.valorTotal().divide(req.litros(), MathContext.DECIMAL128);
-        if (!limites.precoValido(precoLitro)) {
-            throw RegraNegocioException.invalido("Preço do diesel fora do limite de plausibilidade (R$ "
-                    + LimitesPlausibilidade.br(precoLitro) + " por litro). Informe de " + limites.faixaPreco()
-                    + "; confira se litros e valor não foram trocados.");
-        }
-        Integer capacidade = v.getCaminhao().getCapacidadeTanqueLitros();
-        if (capacidade != null && req.litros().compareTo(BigDecimal.valueOf(capacidade)) > 0) {
-            throw RegraNegocioException.invalido("Os litros abastecidos ultrapassam a capacidade do tanque do"
-                    + " caminhão (" + capacidade + " L).");
-        }
+        RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, limites);
     }
 
     private Viagem viagemParaExcluir(Long viagemId) {
@@ -217,29 +185,8 @@ public class LancamentoService {
         a.setValorTotal(req.valorTotal());
     }
 
-    /** Termo proibido em despesa extra, já normalizado (sem acento, minúsculo). */
-    private static final String ALIMENTACAO = "alimentacao";
-
-    /**
-     * Alimentação não é custo do Frota+. Compara a descrição sem acentos, sem
-     * diferença de maiúsculas e com espaços normalizados, e recusa qualquer
-     * descrição que contenha o termo.
-     */
-    static boolean ehAlimentacao(String descricao) {
-        String normalizada = Normalizer.normalize(descricao, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("\\s+", " ")
-                .trim();
-        return normalizada.contains(ALIMENTACAO);
-    }
-
     private static void preencher(Despesa d, DespesaExtraRequest req) {
-        if (ehAlimentacao(req.descricao())) {
-            throw RegraNegocioException.invalido(
-                    "Alimentação não é despesa do frete e não entra nos custos do Frota+.");
-        }
-        d.setDescricao(req.descricao().trim());
+        d.setDescricao(RegrasLancamento.descricaoExtra(req.descricao()));
         d.setData(req.data());
         d.setValor(req.valor());
     }
