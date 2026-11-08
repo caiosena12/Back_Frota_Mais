@@ -28,6 +28,33 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
 
     boolean existsByEmpresaIdAndCaminhaoIdAndStatus(Long empresaId, Long caminhaoId, StatusViagem status);
 
+    boolean existsByEmpresaIdAndCaminhaoId(Long empresaId, Long caminhaoId);
+
+    /** Caminhão de uma viagem da empresa, sem carregar a entidade (usado antes de bloquear o caminhão). */
+    @Query("select v.caminhao.id from Viagem v where v.id = :id and v.empresa.id = :empresaId")
+    Optional<Long> caminhaoDaViagem(@Param("id") Long id, @Param("empresaId") Long empresaId);
+
+    /**
+     * Existe outra viagem do mesmo caminhão cujo período cruza [inicio, fim]?
+     * Intervalos de datas inclusivos: compartilhar um dia já é sobreposição.
+     * fim nulo = período aberto (viagem em andamento), sem limite superior;
+     * o mesmo vale para as viagens existentes com dataFim nula.
+     */
+    @Query("""
+            select count(v) > 0 from Viagem v
+            where v.empresa.id = :empresaId
+              and v.caminhao.id = :caminhaoId
+              and (:ignorarId is null or v.id <> :ignorarId)
+              and (cast(:fim as date) is null or v.dataInicio <= :fim)
+              and (v.dataFim is null or v.dataFim >= :inicio)
+            """)
+    boolean existeSobreposicao(
+            @Param("empresaId") Long empresaId,
+            @Param("caminhaoId") Long caminhaoId,
+            @Param("inicio") LocalDate inicio,
+            @Param("fim") LocalDate fim,
+            @Param("ignorarId") Long ignorarId);
+
     @Query("""
             select v from Viagem v join fetch v.caminhao c
             where v.empresa.id = :empresaId

@@ -86,6 +86,7 @@ public class ViagemService {
                 texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
         estado.validarCoerencia();
+        exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
 
         Viagem v = new Viagem();
         v.setEmpresa(empresas.getReferenceById(empresaId));
@@ -98,7 +99,7 @@ public class ViagemService {
 
     public ViagemResponse atualizar(Long id, ViagemAtualizacaoRequest req) {
         Long empresaId = logado.empresaId();
-        Viagem v = travar(id, empresaId);
+        Viagem v = travarComCaminhao(id, empresaId);
 
         if (!v.isFinalizada() && (req.dataFim() != null || req.kmFinalCarregado() != null)) {
             throw RegraNegocioException.invalido(
@@ -117,6 +118,7 @@ public class ViagemService {
             estado.validarCompleta();
         }
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
         v.marcarAlteracao();
@@ -125,7 +127,7 @@ public class ViagemService {
 
     public ViagemResponse finalizar(Long id, FinalizacaoRequest req) {
         Long empresaId = logado.empresaId();
-        Viagem v = travar(id, empresaId);
+        Viagem v = travarComCaminhao(id, empresaId);
         if (v.isFinalizada()) {
             throw RegraNegocioException.conflito("A viagem já está finalizada.");
         }
@@ -137,6 +139,7 @@ public class ViagemService {
         estado.validarCoerencia();
         estado.validarCompleta();
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
         v.setStatus(StatusViagem.FINALIZADA);
@@ -148,6 +151,30 @@ public class ViagemService {
     /** Busca com bloqueio de escrita; usada por toda operação que altera a viagem ou seus lançamentos. */
     Viagem travar(Long id, Long empresaId) {
         return viagens.travarPorIdEEmpresa(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
+    }
+
+    /**
+     * Bloqueia o caminhão da viagem e depois a própria viagem, sempre nessa ordem
+     * (a mesma da abertura), para que a checagem de sobreposição de períodos não
+     * concorra com outra abertura ou alteração de datas no mesmo caminhão.
+     */
+    private Viagem travarComCaminhao(Long id, Long empresaId) {
+        Long caminhaoId = viagens.caminhaoDaViagem(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
+        caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId).orElseThrow(ViagemService::naoEncontrada);
+        return travar(id, empresaId);
+    }
+
+    /**
+     * Um caminhão não pode ter duas viagens com períodos sobrepostos. Datas
+     * inclusivas; viagem sem data final tem período aberto. Deve ser chamado com
+     * o caminhão já bloqueado.
+     */
+    private void exigirSemSobreposicao(Long empresaId, Long caminhaoId, Estado estado, Long ignorarId) {
+        if (viagens.existeSobreposicao(empresaId, caminhaoId, estado.dataInicio(), estado.dataFim(), ignorarId)) {
+            throw RegraNegocioException.conflito(
+                    "O período desta viagem se sobrepõe ao de outra viagem do mesmo caminhão."
+                    + " Datas são inclusivas: duas viagens do caminhão não podem compartilhar um dia.");
+        }
     }
 
     static RegraNegocioException naoEncontrada() {
