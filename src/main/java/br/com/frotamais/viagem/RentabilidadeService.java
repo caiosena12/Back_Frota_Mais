@@ -2,6 +2,7 @@ package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -14,8 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Reúne os dados de um conjunto de viagens (em poucas consultas, todas
- * filtradas pela empresa) e aplica a CalculadoraRentabilidade.
+ * Rentabilidade dos fretes.
+ *
+ * Frete com fotografia financeira (finalizado): devolve o resultado gravado,
+ * sem recalcular. Demais (em andamento): reúne os dados em poucas consultas,
+ * todas filtradas pela empresa, e aplica a CalculadoraRentabilidade com a
+ * política atual.
  */
 @Service
 @Transactional(readOnly = true)
@@ -27,13 +32,13 @@ public class RentabilidadeService {
 
     private final AbastecimentoRepository abastecimentos;
     private final DespesaRepository despesas;
-    private final LimitesPlausibilidade limites;
+    private final PoliticaCalculo politica;
 
     public RentabilidadeService(AbastecimentoRepository abastecimentos, DespesaRepository despesas,
-            LimitesPlausibilidade limites) {
+            PoliticaCalculo politica) {
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
-        this.limites = limites;
+        this.politica = politica;
     }
 
     public RentabilidadeResponse calcular(Long empresaId, Viagem viagem) {
@@ -42,7 +47,38 @@ public class RentabilidadeService {
 
     /** Todas as viagens precisam pertencer a empresaId; o serviço chamador garante isso. */
     public Map<Long, RentabilidadeResponse> calcular(Long empresaId, List<Viagem> viagens) {
+        Map<Long, RentabilidadeResponse> consolidados = new HashMap<>();
+        List<Viagem> aoVivo = new ArrayList<>();
+        for (Viagem v : viagens) {
+            RentabilidadeResponse r = v.resultadoConsolidado();
+            if (r != null) {
+                consolidados.put(v.getId(), r);
+            } else {
+                aoVivo.add(v);
+            }
+        }
+        Map<Long, RentabilidadeResponse> calculados = calcularAgora(empresaId, aoVivo, politica.limites());
+
         Map<Long, RentabilidadeResponse> resultado = new LinkedHashMap<>();
+        for (Viagem v : viagens) {
+            resultado.put(v.getId(), consolidados.containsKey(v.getId())
+                    ? consolidados.get(v.getId()) : calculados.get(v.getId()));
+        }
+        return resultado;
+    }
+
+    /**
+     * Calcula o frete agora, ignorando a fotografia gravada, com os limites
+     * informados. Usado para (re)gravar a fotografia na finalização ou numa
+     * correção explícita deste frete.
+     */
+    public RentabilidadeResponse recalcular(Long empresaId, Viagem viagem, LimitesPlausibilidade limites) {
+        return calcularAgora(empresaId, List.of(viagem), limites).get(viagem.getId());
+    }
+
+    private Map<Long, RentabilidadeResponse> calcularAgora(Long empresaId, List<Viagem> viagens,
+            LimitesPlausibilidade limites) {
+        Map<Long, RentabilidadeResponse> resultado = new HashMap<>();
         if (viagens.isEmpty()) {
             return resultado;
         }
@@ -85,7 +121,7 @@ public class RentabilidadeService {
      * Preço do diesel calculado agora, a partir do histórico atual. Usado para
      * consolidar a referência na finalização ou numa correção explícita do frete.
      */
-    public PrecoDiesel precoAtual(Long empresaId, Viagem viagem) {
+    public PrecoDiesel precoAtual(Long empresaId, Viagem viagem, LimitesPlausibilidade limites) {
         Long caminhaoId = viagem.getCaminhao().getId();
         return resolverPreco(viagem, abastecimentos.totaisDieselPorViagem(empresaId, Set.of(caminhaoId)), limites);
     }
@@ -93,17 +129,19 @@ public class RentabilidadeService {
     /**
      * Preço do diesel da viagem:
      * 1. média ponderada dos abastecimentos de diesel da própria viagem;
-     * 2. senão, a da viagem anterior mais recente do mesmo caminhão que teve diesel
-     *    com preço médio dentro dos limites de plausibilidade ("anterior" pela data
-     *    de início e, no empate, pelo id). Referências implausíveis são puladas;
-     *    o preço da própria viagem nunca é trocado: se implausível, o cálculo fica
-     *    incompleto;
+     * 2. senão, a da viagem mais recente do mesmo caminhão que COMEÇOU ANTES do
+     *    início desta e teve diesel com preço médio dentro dos limites de
+     *    plausibilidade. Viagens que começaram depois nunca são usadas, mesmo que
+     *    já estejam cadastradas (caso de uma viagem histórica cadastrada depois).
+     *    Referências implausíveis são puladas; o preço da própria viagem nunca é
+     *    trocado: se implausível, o cálculo fica incompleto;
      * 3. senão, sem referência.
+     *
+     * Duas viagens do mesmo caminhão não começam no mesmo dia (regra de
+     * sobreposição), então a data de início define a ordem sem ambiguidade.
      */
     static PrecoDiesel resolverPreco(Viagem viagem, List<TotaisDiesel> historicoDoCaminhao,
             LimitesPlausibilidade limites) {
-        TotaisDiesel atual = new TotaisDiesel(viagem.getId(), null, viagem.getDataInicio(), null, null);
-
         for (TotaisDiesel t : historicoDoCaminhao) {
             if (t.viagemId().equals(viagem.getId())) {
                 return new PrecoDiesel(t.valorPago(), t.litros(),
@@ -111,7 +149,7 @@ public class RentabilidadeService {
             }
         }
         return historicoDoCaminhao.stream()
-                .filter(t -> ORDEM.compare(t, atual) < 0)
+                .filter(t -> t.dataInicio().isBefore(viagem.getDataInicio()))
                 .filter(t -> limites.precoValido(t.valorPago().divide(t.litros(), MathContext.DECIMAL128)))
                 .max(ORDEM)
                 .map(t -> new PrecoDiesel(t.valorPago(), t.litros(),

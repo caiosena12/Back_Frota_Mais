@@ -23,6 +23,14 @@ import java.util.List;
  */
 public final class CalculadoraRentabilidade {
 
+    /**
+     * Versão das fórmulas deste cálculo, gravada na fotografia financeira de
+     * cada frete finalizado. Mude-a sempre que uma fórmula ou regra de
+     * pendência mudar, para que fretes antigos continuem identificando a regra
+     * com que foram calculados.
+     */
+    public static final String VERSAO_POLITICA = "rentabilidade-v1";
+
     private static final MathContext PRECISAO = MathContext.DECIMAL128;
     private static final BigDecimal CEM = BigDecimal.valueOf(100);
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
@@ -117,7 +125,9 @@ public final class CalculadoraRentabilidade {
                 lucro,
                 margem,
                 pendencias.isEmpty(),
-                List.copyOf(pendencias));
+                List.copyOf(pendencias),
+                PoliticaCalculoAplicada.de(limites),
+                null);
     }
 
     /** Margem percentual = lucro ÷ receita × 100, com 2 casas. Nula se não houver receita positiva. */

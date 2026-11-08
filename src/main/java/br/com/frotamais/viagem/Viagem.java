@@ -8,6 +8,7 @@ import br.com.frotamais.caminhao.Caminhao;
 import br.com.frotamais.empresa.Empresa;
 import br.com.frotamais.usuario.Usuario;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -94,6 +95,10 @@ public class Viagem {
     @Column(name = "finalizada_em")
     private Instant finalizadaEm;
 
+    /** Fotografia financeira do frete finalizado. Nula enquanto em andamento. */
+    @Embedded
+    private ResultadoConsolidado resultado;
+
     // Referência de preço do diesel consolidada na finalização (ou na correção
     // explícita deste frete). Enquanto preenchida, o cálculo do frete usa estes
     // valores e não consulta o histórico de outras viagens.
@@ -135,6 +140,20 @@ public class Viagem {
         }
         return new PrecoDiesel(precoDieselValorPago, precoDieselLitros, origemPrecoDiesel,
                 viagemReferenciaPrecoId, referenciaConsolidadaEm);
+    }
+
+    /** Grava a fotografia financeira calculada agora (finalização ou correção explícita). */
+    public void consolidarResultado(RentabilidadeResponse calculo, Instant em) {
+        this.resultado = ResultadoConsolidado.de(calculo, em);
+    }
+
+    /** Fotografia financeira gravada, ou null se o frete ainda não foi consolidado. */
+    public RentabilidadeResponse resultadoConsolidado() {
+        PrecoDiesel referencia = referenciaConsolidada();
+        if (resultado == null || !resultado.existe() || referencia == null) {
+            return null;
+        }
+        return resultado.resposta(referencia);
     }
 
     public boolean isFinalizada() {

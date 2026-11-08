@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +41,13 @@ public class ViagemService {
     private final UsuarioRepository usuarios;
     private final UsuarioLogado logado;
     private final RentabilidadeService rentabilidade;
-    private final LimitesPlausibilidade limites;
+    private final PoliticaCalculo politica;
 
     public ViagemService(ViagemRepository viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, CaminhaoRepository caminhoes, EmpresaRepository empresas,
             UsuarioRepository usuarios, UsuarioLogado logado, RentabilidadeService rentabilidade,
-            LimitesPlausibilidade limites) {
-        this.limites = limites;
+            PoliticaCalculo politica) {
+        this.politica = politica;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
@@ -74,12 +75,7 @@ public class ViagemService {
     public ViagemResponse criar(ViagemCriacaoRequest req) {
         Long empresaId = logado.empresaId();
 
-        // O bloqueio do caminhão serializa aberturas simultâneas no mesmo caminhão.
-        Caminhao caminhao = caminhoes.travarPorIdEEmpresa(req.caminhaoId(), empresaId)
-                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
-        if (caminhao.getStatus() != StatusCaminhao.ATIVO) {
-            throw RegraNegocioException.conflito("Caminhão inativo não pode iniciar viagem.");
-        }
+        Caminhao caminhao = travarCaminhaoAtivo(req.caminhaoId(), empresaId);
         if (viagens.existsByEmpresaIdAndCaminhaoIdAndStatus(empresaId, caminhao.getId(), StatusViagem.EM_ANDAMENTO)) {
             throw RegraNegocioException.conflito(
                     "Este caminhão já tem uma viagem em andamento. Finalize-a antes de abrir outra.");
@@ -88,16 +84,31 @@ public class ViagemService {
         Estado estado = new Estado(req.dataInicio(), null, req.valorFrete(), texto(req.origem()),
                 texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
-        estado.validarCoerencia(limites);
+        estado.validarCoerencia(politica.limites());
         exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
 
+        Viagem v = nova(empresaId, caminhao);
+        estado.aplicar(v);
+        viagens.save(v);
+        return detalhar(empresaId, v);
+    }
+
+    private Viagem nova(Long empresaId, Caminhao caminhao) {
         Viagem v = new Viagem();
         v.setEmpresa(empresas.getReferenceById(empresaId));
         v.setCaminhao(caminhao);
         v.setCriadoPor(usuarios.getReferenceById(logado.usuarioId()));
-        estado.aplicar(v);
-        viagens.save(v);
-        return detalhar(empresaId, v);
+        return v;
+    }
+
+    /** O bloqueio do caminhão serializa aberturas e cadastros simultâneos no mesmo caminhão. */
+    private Caminhao travarCaminhaoAtivo(Long caminhaoId, Long empresaId) {
+        Caminhao caminhao = caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId)
+                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
+        if (caminhao.getStatus() != StatusCaminhao.ATIVO) {
+            throw RegraNegocioException.conflito("Caminhão inativo não pode iniciar viagem.");
+        }
+        return caminhao;
     }
 
     public ViagemResponse atualizar(Long id, ViagemAtualizacaoRequest req) {
@@ -115,7 +126,7 @@ public class ViagemService {
                 req.kmInicialVazio(), req.kmInicialCarregado(),
                 v.isFinalizada() ? req.kmFinalCarregado() : null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
-        estado.validarCoerencia(limites);
+        estado.validarCoerencia(politica.limites());
         if (v.isFinalizada()) {
             // Correção de viagem finalizada: ela precisa continuar completa e coerente.
             estado.validarCompleta();
@@ -126,8 +137,9 @@ public class ViagemService {
         estado.aplicar(v);
         v.marcarAlteracao();
         if (v.isFinalizada()) {
-            // Correção explícita de um frete finalizado: recalcula a referência só dele.
-            consolidarReferencia(empresaId, v);
+            // Correção explícita de um frete finalizado: regrava a fotografia só dele,
+            // com a referência de preço e a política de cálculo atuais.
+            consolidar(empresaId, v, true);
         }
         return detalhar(empresaId, v);
     }
@@ -143,26 +155,42 @@ public class ViagemService {
                 v.getDestino(), v.getKmInicialVazio(), v.getKmInicialCarregado(), req.kmFinalCarregado(),
                 req.consumoMedioVazio() != null ? req.consumoMedioVazio() : v.getConsumoMedioVazio(),
                 req.consumoMedioCarregado() != null ? req.consumoMedioCarregado() : v.getConsumoMedioCarregado());
-        estado.validarCoerencia(limites);
+        estado.validarCoerencia(politica.limites());
         estado.validarCompleta();
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
         v.setStatus(StatusViagem.FINALIZADA);
-        v.setFinalizadaEm(Instant.now());
+        v.setFinalizadaEm(agora());
         v.marcarAlteracao();
-        consolidarReferencia(empresaId, v);
+        consolidar(empresaId, v, true);
         return detalhar(empresaId, v);
     }
 
     /**
-     * Congela no frete a referência de preço do diesel calculada agora. Afeta
-     * apenas esta viagem: nenhum outro frete finalizado é recalculado.
+     * Grava a fotografia financeira do frete, calculada agora com a política
+     * atual. Afeta apenas esta viagem: nenhum outro frete finalizado é
+     * recalculado.
+     *
+     * reavaliarPreco: true na finalização, no cadastro histórico, na correção
+     * da viagem e na correção de diesel (a referência de preço é buscada de
+     * novo); false na correção de Arla, pedágio ou despesa extra (mantém o
+     * preço já congelado e recalcula o restante).
      */
-    void consolidarReferencia(Long empresaId, Viagem v) {
+    void consolidar(Long empresaId, Viagem v, boolean reavaliarPreco) {
         viagens.flush();
-        v.consolidarReferencia(rentabilidade.precoAtual(empresaId, v), Instant.now());
+        LimitesPlausibilidade limites = politica.limites();
+        Instant agora = agora();
+        if (reavaliarPreco || v.referenciaConsolidada() == null) {
+            v.consolidarReferencia(rentabilidade.precoAtual(empresaId, v, limites), agora);
+        }
+        v.consolidarResultado(rentabilidade.recalcular(empresaId, v, limites), agora);
+    }
+
+    /** Instante em microssegundos, a precisão do PostgreSQL: o valor não muda ao recarregar. */
+    private static Instant agora() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     /** Busca com bloqueio de escrita; usada por toda operação que altera a viagem ou seus lançamentos. */

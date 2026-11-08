@@ -29,12 +29,12 @@ public class LancamentoService {
     private final DespesaRepository despesas;
     private final UsuarioRepository usuarios;
     private final UsuarioLogado logado;
-    private final LimitesPlausibilidade limites;
+    private final PoliticaCalculo politica;
 
     public LancamentoService(ViagemService viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, UsuarioRepository usuarios, UsuarioLogado logado,
-            LimitesPlausibilidade limites) {
-        this.limites = limites;
+            PoliticaCalculo politica) {
+        this.politica = politica;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
         this.despesas = despesas;
@@ -60,9 +60,10 @@ public class LancamentoService {
         Abastecimento a = abastecimento(v, id);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
         preencher(a, req);
-        if (v.isFinalizada() && envolveDiesel) {
-            // Correção do diesel de um frete finalizado: recalcula a referência só dele.
-            viagens.consolidarReferencia(logado.empresaId(), v);
+        if (v.isFinalizada()) {
+            // Correção explícita de um frete finalizado: regrava a fotografia só dele. A
+            // referência de preço só é reavaliada se a correção envolve diesel.
+            viagens.consolidar(logado.empresaId(), v, envolveDiesel);
         }
         return AbastecimentoResponse.de(a);
     }
@@ -87,6 +88,7 @@ public class LancamentoService {
         Despesa d = despesa(v, id, TipoDespesa.PEDAGIO);
         d.setData(req.data());
         d.setValor(req.valor());
+        reconsolidarSeFinalizada(v);
         return PedagioResponse.de(d);
     }
 
@@ -108,6 +110,7 @@ public class LancamentoService {
         Viagem v = viagemParaLancar(viagemId, req.data());
         Despesa d = despesa(v, id, TipoDespesa.EXTRA);
         preencher(d, req);
+        reconsolidarSeFinalizada(v);
         return DespesaExtraResponse.de(d);
     }
 
@@ -146,7 +149,14 @@ public class LancamentoService {
 
     /** Ver RegrasLancamento.validarAbastecimento. */
     private void validarAbastecimento(Viagem v, AbastecimentoRequest req) {
-        RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, limites);
+        RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, politica.limites());
+    }
+
+    /** Correção de pedágio ou despesa de frete finalizado: regrava a fotografia só dele, com o mesmo preço. */
+    private void reconsolidarSeFinalizada(Viagem v) {
+        if (v.isFinalizada()) {
+            viagens.consolidar(logado.empresaId(), v, false);
+        }
     }
 
     private Viagem viagemParaExcluir(Long viagemId) {
