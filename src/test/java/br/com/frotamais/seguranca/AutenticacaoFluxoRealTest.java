@@ -167,8 +167,10 @@ class AutenticacaoFluxoRealTest {
                 .content("""
                     {
                         "placa": "ABC1D23",
+                        "marca": "Volvo",
                         "modelo": "Caminhao de teste",
                         "ano": 2024,
+                        "eixos": 6,
                         "status": "ATIVO",
                         "capacidadeTanqueLitros": 300
                     }

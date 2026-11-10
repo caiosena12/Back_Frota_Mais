@@ -185,7 +185,7 @@ class ViagemValidacaoTest extends ApiViagemTeste {
                 "kmInicialVazio", 0), 404), "Caminhão não encontrado");
 
         chamar(PUT("/api/caminhoes/" + caminhaoId), token, corpo("placa", "INA" + (caminhaoId % 10000),
-                "modelo", "x", "ano", 2020, "status", "INATIVO"), 200);
+                "marca", "x", "modelo", "x", "ano", 2020, "eixos", 3, "status", "INATIVO"), 200);
         erro(chamar(POST(VIAGENS), token, corpo("caminhaoId", caminhaoId, "dataInicio", "2025-05-10",
                 "kmInicialVazio", 0), 409), "inativo");
     }

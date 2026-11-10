@@ -64,7 +64,7 @@ public abstract class ApiViagemTeste {
     protected long criarCaminhao(String token) throws Exception {
         String placa = "V" + UUID.randomUUID().toString().replace("-", "").substring(0, 7).toUpperCase();
         return chamar(post("/api/caminhoes"), token, Map.of(
-                "placa", placa, "modelo", "Caminhao de teste", "ano", 2022,
+                "placa", placa, "marca", "Marca de teste", "modelo", "Caminhao de teste", "ano", 2022, "eixos", 6,
                 "status", "ATIVO", "capacidadeTanqueLitros", 600), 201).get("id").asLong();
     }
 

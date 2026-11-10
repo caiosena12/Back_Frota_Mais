@@ -177,9 +177,15 @@ class IsolamentoEmpresaCaminhaoTest {
 
     private record CaminhaoTeste(
             String placa,
+            String marca,
             String modelo,
             Integer ano,
+            Integer eixos,
             String status,
             Integer capacidadeTanqueLitros) {
+
+        CaminhaoTeste(String placa, String modelo, Integer ano, String status, Integer capacidadeTanqueLitros) {
+            this(placa, "Marca de teste", modelo, ano, 6, status, capacidadeTanqueLitros);
+        }
     }
 }

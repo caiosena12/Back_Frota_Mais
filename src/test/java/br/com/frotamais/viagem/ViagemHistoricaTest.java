@@ -227,11 +227,12 @@ class ViagemHistoricaTest extends ApiViagemTeste {
             cadastrar(c, 400);
         }
 
-        // Caminhão inativo.
-        long inativo = chamar(POST("/api/caminhoes"), token, corpo("placa", "HIN" + (caminhaoId % 10000),
-                "modelo", "x", "ano", 2020, "status", "INATIVO"), 201).get("id").asLong();
+        // Caminhão excluído (o inativo aceita viagem anterior à inativação: CaminhaoHistoricoTest).
+        long excluido = chamar(POST("/api/caminhoes"), token, corpo("placa", "HIN" + (caminhaoId % 10000),
+                "marca", "x", "modelo", "x", "ano", 2020, "eixos", 3), 201).get("id").asLong();
+        chamar(DELETE("/api/caminhoes/" + excluido), token, null, 204);
         Map<String, Object> c = historica("2025-03-10", "2025-03-12");
-        c.put("caminhaoId", inativo);
+        c.put("caminhaoId", excluido);
         cadastrar(c, 409);
 
         // Nada foi gravado.

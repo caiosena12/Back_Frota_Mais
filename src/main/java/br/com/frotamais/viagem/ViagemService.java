@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.frotamais.caminhao.Caminhao;
 import br.com.frotamais.caminhao.CaminhaoRepository;
-import br.com.frotamais.caminhao.StatusCaminhao;
+import br.com.frotamais.comum.Datas;
 import br.com.frotamais.comum.RegraNegocioException;
 import br.com.frotamais.empresa.EmpresaRepository;
 import br.com.frotamais.seguranca.UsuarioLogado;
@@ -32,7 +32,7 @@ import br.com.frotamais.usuario.UsuarioRepository;
 @Transactional
 public class ViagemService {
 
-    static final ZoneId FUSO = ZoneId.of("America/Sao_Paulo");
+    static final ZoneId FUSO = Datas.FUSO;
 
     private final ViagemRepository viagens;
     private final AbastecimentoRepository abastecimentos;
@@ -76,7 +76,7 @@ public class ViagemService {
     public ViagemResponse criar(ViagemCriacaoRequest req) {
         Long empresaId = logado.empresaId();
 
-        Caminhao caminhao = travarCaminhaoAtivo(req.caminhaoId(), empresaId);
+        Caminhao caminhao = travarCaminhaoParaAbertura(req.caminhaoId(), empresaId);
         if (viagens.existsByEmpresaIdAndCaminhaoIdAndStatus(empresaId, caminhao.getId(), StatusViagem.EM_ANDAMENTO)) {
             throw RegraNegocioException.conflito(
                     "Este caminhão já tem uma viagem em andamento. Finalize-a antes de abrir outra.");
@@ -108,7 +108,7 @@ public class ViagemService {
     public ViagemResponse criarHistorica(ViagemHistoricaRequest req) {
         Long empresaId = logado.empresaId();
         LimitesPlausibilidade limites = politica.limites();
-        Caminhao caminhao = travarCaminhaoAtivo(req.caminhaoId(), empresaId);
+        Caminhao caminhao = travarCaminhaoParaHistorica(req.caminhaoId(), empresaId, req.dataFim());
 
         Estado estado = new Estado(req.dataInicio(), req.dataFim(), req.valorFrete(), texto(req.origem()),
                 texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), req.kmFinalCarregado(),
@@ -178,14 +178,51 @@ public class ViagemService {
         return d;
     }
 
-    /** O bloqueio do caminhão serializa aberturas e cadastros simultâneos no mesmo caminhão. */
-    private Caminhao travarCaminhaoAtivo(Long caminhaoId, Long empresaId) {
-        Caminhao caminhao = caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId)
-                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
-        if (caminhao.getStatus() != StatusCaminhao.ATIVO) {
-            throw RegraNegocioException.conflito("Caminhão inativo não pode iniciar viagem.");
+    /**
+     * Nova viagem: só em caminhão ATIVO. O bloqueio do caminhão serializa
+     * aberturas e cadastros simultâneos no mesmo caminhão.
+     */
+    private Caminhao travarCaminhaoParaAbertura(Long caminhaoId, Long empresaId) {
+        Caminhao caminhao = travarCaminhao(caminhaoId, empresaId);
+        switch (caminhao.getStatus()) {
+            case ATIVO -> { }
+            case INATIVO -> throw RegraNegocioException.conflito("Caminhão inativo não pode iniciar viagem.");
+            case EXCLUIDO -> throw RegraNegocioException.conflito("Caminhão excluído não pode iniciar viagem.");
         }
         return caminhao;
+    }
+
+    /**
+     * Viagem histórica (já aconteceu):
+     * - ATIVO: aceita;
+     * - INATIVO: aceita se a viagem terminou antes da data de inativação;
+     * - EXCLUIDO: recusada. Se a regra para caminhão excluído for definida,
+     *   ela entra só aqui (o momento da exclusão já fica gravado em excluidoEm).
+     */
+    private Caminhao travarCaminhaoParaHistorica(Long caminhaoId, Long empresaId, LocalDate dataFim) {
+        Caminhao caminhao = travarCaminhao(caminhaoId, empresaId);
+        switch (caminhao.getStatus()) {
+            case ATIVO -> { }
+            case INATIVO -> {
+                LocalDate inativacao = caminhao.dataInativacao(FUSO);
+                if (inativacao == null) {
+                    throw RegraNegocioException.conflito("A data de inativação deste caminhão não é conhecida;"
+                            + " reative-o para cadastrar a viagem histórica.");
+                }
+                if (!dataFim.isBefore(inativacao)) {
+                    throw RegraNegocioException.conflito("Caminhão inativo só recebe viagem histórica que terminou"
+                            + " antes da inativação, em " + inativacao + ".");
+                }
+            }
+            case EXCLUIDO -> throw RegraNegocioException.conflito(
+                    "Caminhão excluído não recebe cadastro de viagem histórica.");
+        }
+        return caminhao;
+    }
+
+    private Caminhao travarCaminhao(Long caminhaoId, Long empresaId) {
+        return caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId)
+                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
     }
 
     public ViagemResponse atualizar(Long id, ViagemAtualizacaoRequest req) {
