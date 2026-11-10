@@ -3,10 +3,8 @@ package br.com.frotamais.caminhao;
 import java.util.List;
 
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import br.com.frotamais.comum.RegraNegocioException;
 import br.com.frotamais.empresa.EmpresaRepository;
@@ -44,7 +42,7 @@ public class CaminhaoService {
         Long empresaId = logado.empresaId();
         String placa = normalizarPlaca(request.placa());
         if (repository.existsByEmpresaIdAndPlaca(empresaId, placa)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe um caminhão com essa placa");
+            throw RegraNegocioException.conflito("Já existe um caminhão com essa placa.");
         }
         Caminhao caminhao = new Caminhao();
         caminhao.setEmpresa(empresas.getReferenceById(empresaId));
@@ -69,7 +67,7 @@ public class CaminhaoService {
         String placa = normalizarPlaca(request.placa());
         if (!placa.equals(caminhao.getPlaca())
                 && repository.existsByEmpresaIdAndPlaca(logado.empresaId(), placa)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe um caminhão com essa placa");
+            throw RegraNegocioException.conflito("Já existe um caminhão com essa placa.");
         }
         preencher(caminhao, request, placa);
         return CaminhaoResponse.de(repository.save(caminhao));
@@ -99,12 +97,12 @@ public class CaminhaoService {
 
     private Caminhao travar(Long id) {
         return repository.travarPorIdEEmpresa(id, logado.empresaId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Caminhão não encontrado"));
+                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
     }
 
     private Caminhao encontrar(Long id) {
         return repository.findByIdAndEmpresaId(id, logado.empresaId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Caminhão não encontrado"));
+                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
     }
 
     private void preencher(Caminhao caminhao, CaminhaoRequest request, String placa) {

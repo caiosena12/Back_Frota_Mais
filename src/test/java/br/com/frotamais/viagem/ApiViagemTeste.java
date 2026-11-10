@@ -36,7 +36,7 @@ import tools.jackson.databind.ObjectMapper;
 })
 @AutoConfigureMockMvc
 @Transactional
-abstract class ApiViagemTeste {
+public abstract class ApiViagemTeste {
 
     protected static final String VIAGENS = "/api/viagens";
 

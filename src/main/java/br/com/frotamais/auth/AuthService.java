@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
+import br.com.frotamais.comum.RegraNegocioException;
 
 import br.com.frotamais.empresa.Empresa;
 import br.com.frotamais.empresa.EmpresaRepository;
@@ -43,8 +43,7 @@ public class AuthService {
 
         String email = normalizarEmail(request.email());
         if (usuarios.existsByEmail(email)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "E-mail já cadastrado.");
+            throw RegraNegocioException.conflito("E-mail já cadastrado.");
         }
 
         Empresa empresa = new Empresa();
@@ -69,16 +68,14 @@ public class AuthService {
         Usuario usuario = usuarios.findByEmail(normalizarEmail(request.email()))
                 .filter(Usuario::isAtivo)
                 .filter(u -> encoder.matches(request.senha(), u.getSenhaHash()))
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, "E-mail ou senha inválidos."));
+                .orElseThrow(() -> RegraNegocioException.naoAutenticado("E-mail ou senha inválidos."));
 
         return resposta(usuario);
     }
 
     private void validarBytesSenha(String senha, HttpStatus status) {
         if (senha.getBytes(StandardCharsets.UTF_8).length > BCRYPT_MAX_BYTES) {
-            throw new ResponseStatusException(
-                    status, "A senha ultrapassa o limite permitido pelo BCrypt.");
+            throw new RegraNegocioException(status, "A senha ultrapassa o limite permitido pelo BCrypt.");
         }
     }
 

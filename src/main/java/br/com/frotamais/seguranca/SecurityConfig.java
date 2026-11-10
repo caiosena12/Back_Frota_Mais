@@ -1,5 +1,7 @@
 package br.com.frotamais.seguranca;
 
+import br.com.frotamais.comum.RespostasSeguranca;
+
 import java.util.Base64;
 import java.util.List;
 
@@ -71,8 +73,13 @@ public class SecurityConfig {
                                 "/api/auth/registro", "/api/auth/login").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(o ->
-                        o.jwt(j -> j.jwtAuthenticationConverter(conversor())))
+                .oauth2ResourceServer(o -> o
+                        .jwt(j -> j.jwtAuthenticationConverter(conversor()))
+                        .authenticationEntryPoint(RespostasSeguranca.naoAutenticado())
+                        .accessDeniedHandler(RespostasSeguranca.acessoNegado()))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(RespostasSeguranca.naoAutenticado())
+                        .accessDeniedHandler(RespostasSeguranca.acessoNegado()))
                 .build();
     }
 
