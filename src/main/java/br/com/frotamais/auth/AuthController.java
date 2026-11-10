@@ -1,5 +1,7 @@
 package br.com.frotamais.auth;
 
+import br.com.frotamais.seguranca.UsuarioLogado;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,9 +16,11 @@ import jakarta.validation.Valid;
 public class AuthController {
 
     private final AuthService service;
+    private final UsuarioLogado logado;
 
-    public AuthController(AuthService service) {
+    public AuthController(AuthService service, UsuarioLogado logado) {
         this.service = service;
+        this.logado = logado;
     }
 
     @PostMapping("/registro")
@@ -28,5 +32,12 @@ public class AuthController {
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return service.login(request);
+    }
+
+    /** Troca da própria senha, para qualquer perfil autenticado. */
+    @PostMapping("/senha")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void trocarSenha(@Valid @RequestBody TrocaSenhaRequest request) {
+        service.trocarSenha(logado.usuarioId(), request);
     }
 }
