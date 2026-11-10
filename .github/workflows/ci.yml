@@ -1,0 +1,75 @@
+# Integração contínua: migrations + suíte completa + build, num PostgreSQL
+# descartável criado só para a execução. Não usa nenhum banco persistente nem
+# segredo: a senha abaixo vale apenas para esse contêiner efêmero, e a chave JWT
+# dos testes é fixada nas próprias classes de teste.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          # Mesmo nome exigido pelo GuardaBancoDeTeste.
+          POSTGRES_DB: frotamais_test_flyway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d frotamais_test_flyway"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Validar o pom.xml
+        run: ./mvnw -B -ntp validate
+
+      # Os testes sobem o contexto: o Flyway aplica todas as migrations no banco
+      # vazio e o Hibernate (ddl-auto=validate) confere as entidades contra ele.
+      - name: Testes e build
+        run: ./mvnw -B -ntp verify
+
+      - name: Histórico das migrations aplicadas
+        if: always()
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -h localhost -U postgres -d frotamais_test_flyway
+          -c "select version, description, success from flyway_schema_history order by installed_rank"
+
+      - name: Relatórios de teste
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+          retention-days: 7
