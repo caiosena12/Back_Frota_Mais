@@ -18,8 +18,8 @@ import org.springframework.context.ConfigurableApplicationContext;
  *
  * O arquivo config/application.properties escolhe o banco, mas variáveis como
  * SPRING_DATASOURCE_URL têm precedência sobre ele. Por isso a decisão final é
- * do próprio PostgreSQL: assim que o DataSource é criado, antes de o Hibernate
- * aplicar o ddl-auto, perguntamos a qual banco a conexão chegou.
+ * do próprio PostgreSQL: assim que o DataSource é criado, antes de o Flyway
+ * aplicar as migrations, perguntamos a qual banco a conexão chegou.
  *
  * Registrado em META-INF/spring.factories, vale para todo contexto Spring da
  * suíte, sem anotação, e só existe no classpath de teste.
@@ -27,7 +27,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 public class GuardaBancoDeTeste
         implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
-    static final String BANCO_ESPERADO = "frotamais_test";
+    static final String BANCO_ESPERADO = "frotamais_test_flyway";
 
     private static final Logger log = LoggerFactory.getLogger(GuardaBancoDeTeste.class);
 

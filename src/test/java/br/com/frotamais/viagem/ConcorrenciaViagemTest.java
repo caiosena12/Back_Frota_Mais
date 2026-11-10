@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Concorrência real: requisições simultâneas, cada uma na sua thread e na sua
- * transação, que de fato gravam (commit) no banco frotamais_test. Por isso
+ * transação, que de fato gravam (commit) no banco frotamais_test_flyway. Por isso
  * esta classe NÃO usa a transação de teste com rollback da classe base.
  *
  * Os dados são isolados (empresa, usuário e caminhão novos, só deste teste)
@@ -57,7 +57,7 @@ class ConcorrenciaViagemTest extends ApiViagemTeste {
         if (empresaId == null) {
             return;
         }
-        assertEquals("frotamais_test", jdbc.queryForObject("select current_database()", String.class));
+        assertEquals("frotamais_test_flyway", jdbc.queryForObject("select current_database()", String.class));
         String daEmpresa = "select id from viagens where empresa_id = ?";
         jdbc.update("delete from abastecimentos where viagem_id in (" + daEmpresa + ")", empresaId);
         jdbc.update("delete from despesas_viagem where viagem_id in (" + daEmpresa + ")", empresaId);
