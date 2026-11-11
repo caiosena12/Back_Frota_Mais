@@ -50,9 +50,10 @@ Todas as respostas de erro, inclusive `401` e `403`, têm o mesmo corpo:
 
 - Senha: de 8 caracteres a 72 bytes, com pelo menos uma letra e um número.
 - E-mail único em todo o sistema (`409` no registro ou cadastro duplicado).
-- Convite: uso único, validade `app.convites.validade-horas` (padrão 24 h);
-  reenviar invalida o anterior. Token inválido, usado, expirado ou
-  invalidado: `400`, sem dizer qual dos casos.
+- Convite: token aleatório guardado só como hash, uso único, validade de
+  24 h (`app.convites.validade-horas`); reenviar invalida o anterior, e o DONO
+  pode cancelar o pendente. Token inválido, usado, expirado, invalidado ou
+  cancelado: `400`, sem dizer qual dos casos.
 
 ## Caminhões: `/api/caminhoes`
 
@@ -83,9 +84,14 @@ Corpo: `placa`, `marca`, `modelo`, `ano`, `eixos` (1 a 20), `status`
 | `PUT /api/motoristas/{id}` | `nome`, `ativo` | `200` |
 | `PUT /api/motoristas/{id}/caminhoes` | `caminhaoIds` (lista completa; vazia remove todos) | `200` |
 | `POST /api/motoristas/{id}/convite` | | `200`, reenvia e invalida o anterior; conta já ativada: `409` |
+| `DELETE /api/motoristas/{id}/convite` | | `200`, cancela o convite pendente (o link deixa de valer na hora; o registro fica); conta já ativada ou sem convite pendente: `409` |
 
 Resposta: `id`, `nome`, `email`, `situacao` (`CONVITE_PENDENTE`, `ATIVO`, `INATIVO`),
-`caminhaoIds`, `conviteExpiraEm`.
+`caminhaoIds`, `conviteExpiraEm` (nulo sem convite válido, por exemplo depois
+do cancelamento: a conta continua `CONVITE_PENDENTE` até um novo convite ser
+enviado e usado). Cancelar não envia e-mail.
+
+Motorista de outra empresa: `404`. MOTORISTA nessas rotas: `403`.
 
 ## Viagens: `/api/viagens`
 
@@ -108,7 +114,13 @@ Viagem de caminhão não vinculado ao MOTORISTA responde `404`.
 **Abertura** (`POST /api/viagens`): `caminhaoId`, `dataInicio`, `motoristaId`
 (opcional; DONO pode indicar um motorista ativo e vinculado ao caminhão, a si
 mesmo ou ninguém), `origem`, `destino`, `valorFrete` (opcional na abertura),
-`kmInicialVazio` e/ou `kmInicialCarregado`, consumos médios.
+`kmInicialVazio` e/ou `kmInicialCarregado`, consumos médios e
+`abastecimentos` (lista opcional, até 200 itens, no mesmo formato do
+lançamento). A viagem e os abastecimentos são gravados na mesma transação,
+depois de todos os itens validados; um item inválido recusa tudo (`400`) e
+nada é gravado. É o caminho para registrar o diesel e o Arla abastecidos
+antes de sair (ver as regras de data em **Lançamentos**). O
+`POST .../abastecimentos` continua disponível depois da abertura.
 
 **Alteração** (`PUT`): mesmos campos, sem `caminhaoId`; `dataFim` e
 `kmFinalCarregado` só em viagem encerrada.
@@ -117,15 +129,37 @@ mesmo ou ninguém), `origem`, `destino`, `valorFrete` (opcional na abertura),
 gravados). Exige valor do frete, origem e destino.
 
 **Cancelamento:** `motivo` (obrigatório, texto livre), `dataFim` (padrão: hoje),
-`kmFinalCarregado` e consumos opcionais. Só viagem em andamento. A viagem fica
-`CANCELADA`, com período fechado e resultado consolidado; não é apagada.
+`kmFinalCarregado` e consumos opcionais. Só viagem em andamento; finalizada
+não é cancelada (`409`). A viagem fica `CANCELADA`, com período fechado e
+resultado consolidado; não é apagada. A `dataFim` é a **data do cancelamento**:
+define o mês em que os valores entram no financeiro (ver **Indicadores**).
+Receber valor ou ter despesas não muda o status.
 
-**Histórica:** viagem que já aconteceu, criada finalizada numa só operação, com
-listas opcionais `abastecimentos`, `pedagios` e `despesasExtras`.
+**Histórica** (só DONO): viagem que já aconteceu, criada finalizada numa só
+operação, com listas opcionais `abastecimentos`, `pedagios` e
+`despesasExtras`. Caminhão `INATIVO`: só se a viagem terminou antes da
+inativação. Caminhão `EXCLUIDO`: só se terminou antes da exclusão (ou da
+inativação, se ele já estava inativo antes); o caminhão continua excluído.
+Fora disso: `409`.
 
-**Viagem encerrada** (finalizada ou cancelada): não aceita lançamento novo nem
-exclusão (`409`); o DONO corrige pelo `PUT`, e cada campo corrigido fica em
-`/alteracoes`, com a fotografia anterior em `/fotografias-anteriores`.
+**Viagem finalizada:** não aceita lançamento novo nem exclusão (`409`). O DONO
+corrige pelo `PUT` (viagem e lançamentos); o MOTORISTA recebe `403`.
+
+**Viagem cancelada:** só o DONO registra ou corrige valores depois do
+cancelamento: o valor recebido vai no `valorFrete` (pelo `PUT`), e as despesas,
+pedágios e abastecimentos vão pelos lançamentos normais (`POST` e `PUT`), com
+data dentro do período da viagem (`400` fora dele). Exclusão de lançamento:
+`409`. MOTORISTA: `403` em qualquer alteração.
+
+**Auditoria:** toda correção de viagem encerrada, e toda inclusão em viagem
+cancelada, regrava a fotografia financeira só daquela viagem e fica em:
+- `GET /alteracoes`: `id`, `alteradaEm`, `usuarioId`, `usuarioNome`, `perfil`
+  (de quem alterou, no momento da alteração), `entidade` (`VIAGEM`,
+  `ABASTECIMENTO`, `PEDAGIO`, `DESPESA_EXTRA`), `registroId`, `campo`,
+  `valorAnterior` (nulo numa inclusão) e `valorNovo`;
+- `GET /fotografias-anteriores`: `id`, `substituidaEm`, `substituidaPorId`,
+  `substituidaPorNome`, `perfil`, `resultado` (a fotografia substituída) e
+  `resultadoNovo` (a que a substituiu; nulo em registros anteriores à V11).
 
 Regras de período: duas viagens do mesmo caminhão não se sobrepõem (datas
 inclusivas; só o dia em que uma termina e a outra começa pode ser
@@ -146,7 +180,8 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 - Abastecimento também pode ser **anterior ao início**, se foi feito entre
   viagens: a partir do dia em que a viagem anterior do caminhão terminou. Ele
   pertence à viagem seguinte, com data e hora reais. Sem viagem anterior
-  (primeiro frete do caminhão), é recusado (`400`): regra ainda não definida.
+  (primeiro frete do caminhão), qualquer data anterior ao início é aceita, sem
+  limite de dias. A data nunca é ajustada para coincidir com o início.
 - A data final de uma viagem não pode passar dos abastecimentos antecipados
   da seguinte (`409`).
 
@@ -154,16 +189,37 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 
 `GET /api/viagens/indicadores` com um filtro de período (`ano`; `ano`+`mes`;
 `semana` = qualquer data da semana, segunda a domingo; ou `de`/`ate`) e
-`caminhaoId` opcional. Fretes entram pela data final; manutenções, pela data.
+`caminhaoId` opcional. Fretes entram pela data final; canceladas, pela data do
+cancelamento (a `dataFim` delas); manutenções, pela data.
 
-Totais só de fretes finalizados com cálculo completo (incompletos listados à
-parte). Margem ponderada (lucro ÷ receita × 100). Também: custo e lucro por km,
-percentual de km vazio, consumo médio, diesel pago × estimado (informativo,
-nunca somado ao custo), quantidade e custo de manutenções e resultado após
-manutenções. Viagens canceladas não entram.
+**Fretes concluídos** (finalizados com cálculo completo; incompletos listados à
+parte em `viagensComCalculoIncompleto`, com `valorFreteIncompletasNaoIncluido`
+só informativo): `viagensFinalizadas`, `viagensConsideradas`, `receitaTotal`,
+custos por tipo, `custoOperacionalTotal`, `lucroTotal`, `margemPercentual`
+(ponderada: lucro ÷ receita × 100), `kmVazio`, `kmCarregado`, `custoPorKm`,
+`lucroPorKm`, `percentualKmVazio`, `consumoMedioKmPorLitro`, `dieselPago`,
+`dieselEstimado` e `diferencaDieselPagoEstimado` (informativos: o pago nunca é
+somado ao custo). Canceladas não entram em nenhum deles.
+
+**Manutenções:** `quantidadeManutencoes`, `custoManutencoes` e
+`resultadoAposManutencoes` (= `lucroTotal` − `custoManutencoes`).
+
+**Canceladas** (bloco separado): `viagensCanceladas`, `receitaCanceladas`
+(valores recebidos), `custoCanceladas` (custos conhecidos: Arla, pedágios,
+despesas e o diesel quando calculável), `resultadoCanceladas` e
+`canceladasComCustoIncompleto` (ids das que não tiveram o diesel calculado; esse
+diesel fica fora da soma, nunca como zero).
+
+**`resultadoFinanceiroPeriodo`** = `lucroTotal` + `resultadoCanceladas` −
+`custoManutencoes`: o financeiro geral do período, sem dupla contagem.
+
+Exemplo: frete concluído com receita 3000 e custo 1200 (lucro 1800, margem
+60%); cancelada com 500 recebidos e 300 de custo (resultado 200); manutenção
+de 150. Resultado: `resultadoAposManutencoes` 1650 e
+`resultadoFinanceiroPeriodo` 1850; a margem continua 60%.
 
 `GET /api/viagens/indicadores/por-caminhao`: os mesmos indicadores para cada
-caminhão com frete finalizado ou manutenção no período.
+caminhão com frete finalizado, viagem cancelada ou manutenção no período.
 
 ## Manutenções: `/api/manutencoes` (só DONO)
 

@@ -16,11 +16,12 @@ Este repositório contém a **API REST do back-end**. O front-end em Angular ain
 |---|---|
 | Registro de empresa com o primeiro usuário DONO; login com JWT | Front-end em Angular |
 | Perfis DONO e MOTORISTA, com isolamento por empresa | Dashboards e relatórios visuais, exportação |
-| Caminhões com marca, eixos, inativação e exclusão lógica | Viagens canceladas no resultado mensal (data de referência pendente) |
-| Motoristas por convite de e-mail, com vínculo aos caminhões | Abastecimento anterior ao primeiro frete do caminhão (regra pendente) |
-| Viagens: abertura, finalização, cancelamento, viagem histórica, motorista responsável | Rate limit em login, registro e ativação |
-| Abastecimentos de diesel e Arla (inclusive entre viagens), pedágios e despesas extras | CORS (depende da estratégia do Angular) |
+| Caminhões com marca, eixos, inativação e exclusão lógica | Rate limit em login, registro e ativação |
+| Motoristas por convite de e-mail (24 h, reenvio e cancelamento), com vínculo aos caminhões | CORS (depende da estratégia do Angular) |
+| Viagens: abertura (com abastecimentos anteriores), finalização, cancelamento, viagem histórica, motorista responsável | |
+| Abastecimentos de diesel e Arla (inclusive entre viagens e antes do primeiro frete), pedágios e despesas extras | |
 | Rentabilidade por frete, com fotografia financeira e auditoria das correções | |
+| Viagens canceladas no financeiro do mês do cancelamento, separadas dos fretes concluídos | |
 | Manutenções por caminhão e indicadores por período e por caminhão | |
 | Schema versionado (Flyway), CI e testes em banco exclusivo | |
 

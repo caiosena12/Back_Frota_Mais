@@ -72,21 +72,22 @@ Invariantes que não podem ser quebrados:
 - **Períodos:** duas viagens do mesmo caminhão não se sobrepõem (datas inclusivas; em andamento = período aberto), e a checagem roda com o caminhão bloqueado. Única data compartilhável: o dia em que uma termina e a seguinte começa. Duas viagens não começam no mesmo dia, e por isso a data de início ordena as viagens do caminhão.
 - **Ordem de bloqueio:** sempre caminhão → viagem.
 - **Fotografia financeira:** frete encerrado (finalizado ou cancelado) devolve o resultado e a política de cálculo gravados no encerramento (`ResultadoConsolidado`), sem recalcular. Só uma correção explícita dele regrava a fotografia, com a política atual (`ViagemService.consolidar`), e a versão anterior é arquivada (`AuditoriaViagem`). Nunca recalcule outros fretes encerrados. Mudou uma fórmula? Troque `CalculadoraRentabilidade.VERSAO_POLITICA`.
-- **Auditoria:** toda correção de viagem encerrada (da viagem ou de um lançamento) passa por `AuditoriaViagem.registrar`, com o retrato dos campos antes e depois. As tabelas de auditoria só recebem inclusões.
+- **Auditoria:** toda correção de viagem encerrada (da viagem ou de um lançamento) e toda inclusão em viagem cancelada passam por `AuditoriaViagem.registrar`, com o retrato dos campos antes e depois e o perfil de quem alterou. As tabelas de auditoria só recebem inclusões.
 - **Preço de referência:** só de viagem que começou antes; nunca de uma posterior (vale para a viagem histórica).
 - **Plausibilidade:** os limites ficam em `app.viagens.limites.*` (`LimitesPlausibilidade`), lidos a cada operação por `PoliticaCalculo.limites()`. Não espalhe constantes pelo código. Arla não tem limite de preço nem de tanque.
 - **Viagem histórica** (`POST /api/viagens/historicas`): nasce finalizada, numa transação, com tudo validado antes de gravar.
-- **Viagem encerrada** (finalizada ou cancelada): não aceita `POST` nem `DELETE` de lançamento. Cancelar é só do DONO, com motivo, a partir de viagem em andamento.
-- **Abastecimento entre viagens:** pode ser anterior ao início da viagem, a partir do dia em que a anterior do caminhão terminou; pertence à seguinte. A data final da anterior não pode passar desses abastecimentos (`exigirSeguinteCompativel`). Sem viagem anterior: recusado (regra pendente).
+- **Viagem encerrada:** finalizada não aceita `POST` de lançamento; cancelada aceita só do DONO (auditado, regrava a fotografia dela). Nenhuma aceita `DELETE` de lançamento, e o MOTORISTA não altera nenhuma. Cancelar é só do DONO, com motivo, a partir de viagem em andamento; a `dataFim` da cancelada é a data do cancelamento.
+- **Canceladas no financeiro:** entram pelo mês da data do cancelamento, em bloco separado nos indicadores, e somam no `resultadoFinanceiroPeriodo`; nunca nos indicadores de desempenho dos fretes concluídos.
+- **Abastecimento entre viagens:** pode ser anterior ao início da viagem, a partir do dia em que a anterior do caminhão terminou; pertence à seguinte. A data final da anterior não pode passar desses abastecimentos (`exigirSeguinteCompativel`). Sem viagem anterior (primeiro frete): aceito, sem limite de dias. A abertura aceita a lista `abastecimentos`, na mesma transação.
 - **Despesa extra:** descrição livre. Não bloqueie palavras (alimentação inclusive) nem crie categorias ou classificação automática sem decisão de negócio.
-- **Caminhão:** com viagem aberta não é inativado nem excluído. A exclusão é lógica (`EXCLUIDO`); caminhão excluído não entra em viagens nem recebe manutenções, e seu histórico fica intacto.
+- **Caminhão:** com viagem aberta não é inativado nem excluído. A exclusão é lógica (`EXCLUIDO`); caminhão excluído não entra em viagens novas nem recebe manutenções (só viagem histórica que terminou antes da exclusão), e seu histórico fica intacto.
 - **Manutenção:** pertence ao caminhão, nunca a um frete; entra só nos indicadores do período e não altera nenhuma viagem.
 
 **Spring Boot 4:** Jackson é 3.x (`tools.jackson.databind`), `@AutoConfigureMockMvc` fica em `org.springframework.boot.webmvc.test.autoconfigure` e `include-message` é `spring.web.error.*`. Não troque imports por memória do Boot 3.
 
 **Testes:** `jwt()` do `spring-security-test` contorna o `conversor()`. Um teste com ele prova o `@PreAuthorize`, não o fluxo real.
 
-**Lacunas conhecidas:** valores de viagens canceladas ainda não entram no resultado mensal (data de referência pendente); abastecimento anterior ao primeiro frete do caminhão é recusado (pendente); viagem histórica em caminhão `EXCLUIDO` é recusada (pendente); não há rate limit em login, registro e ativação; CORS não configurado (depende do Angular). O e-mail é único em todo o sistema.
+**Lacunas conhecidas:** não há rate limit em login, registro e ativação; CORS não configurado (depende do Angular); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
 
 ## Modo de trabalho
 
