@@ -60,6 +60,18 @@ public class ViagemController {
         return indicadores.indicadores(ano, mes, semana, de, ate, caminhaoId);
     }
 
+    /** Indicadores de cada caminhão com frete finalizado ou manutenção no período. Só DONO. */
+    @GetMapping("/indicadores/por-caminhao")
+    @PreAuthorize("hasRole('DONO')")
+    public List<IndicadoresCaminhaoResponse> indicadoresPorCaminhao(
+            @RequestParam(required = false) Integer ano,
+            @RequestParam(required = false) Integer mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate semana,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return indicadores.porCaminhao(ano, mes, semana, de, ate);
+    }
+
     @GetMapping("/{id}")
     public ViagemResponse buscar(@PathVariable Long id) {
         return service.buscar(id);
