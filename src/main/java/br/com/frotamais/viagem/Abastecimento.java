@@ -3,6 +3,7 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 import br.com.frotamais.usuario.Usuario;
 import jakarta.persistence.Column;
@@ -19,6 +20,10 @@ import jakarta.persistence.Table;
 
 /**
  * Abastecimento de diesel ou Arla lançado em uma viagem.
+ *
+ * Pode ter data anterior ao início da viagem: o abastecimento feito entre o
+ * fim da viagem anterior do caminhão e o início desta pertence a esta (ver
+ * RegrasLancamento.validarDataAbastecimento). A data real é preservada.
  *
  * Não tem empresa_id: o isolamento vem da viagem, e toda consulta filtra por
  * viagem.empresa.id.
@@ -42,6 +47,9 @@ public class Abastecimento {
     @Column(nullable = false)
     private LocalDate data;
 
+    /** Hora local real do abastecimento (opcional; registros antigos não têm). */
+    private LocalTime hora;
+
     @Column(nullable = false, precision = 10, scale = 3)
     private BigDecimal litros;
 
@@ -62,6 +70,8 @@ public class Abastecimento {
     public void setTipo(TipoCombustivel tipo) { this.tipo = tipo; }
     public LocalDate getData() { return data; }
     public void setData(LocalDate data) { this.data = data; }
+    public LocalTime getHora() { return hora; }
+    public void setHora(LocalTime hora) { this.hora = hora; }
     public BigDecimal getLitros() { return litros; }
     public void setLitros(BigDecimal litros) { this.litros = litros; }
     public BigDecimal getValorTotal() { return valorTotal; }

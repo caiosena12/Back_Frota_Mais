@@ -3,6 +3,7 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -166,8 +167,10 @@ public class ViagemService {
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
         estado.validarCoerencia(limites);
         estado.validarCompleta();
+        LocalDate fimAnterior = fimDaAnterior(empresaId, caminhao.getId(), estado.dataInicio(), null);
         for (AbastecimentoRequest a : req.abastecimentosOuVazio()) {
-            RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), a.data());
+            RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), estado.dataFim(), fimAnterior,
+                    a.data(), a.hora());
             RegrasLancamento.validarAbastecimento(caminhao, a, limites);
         }
         for (PedagioRequest p : req.pedagiosOuVazio()) {
@@ -177,6 +180,7 @@ public class ViagemService {
             RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), d.data());
         }
         exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
+        exigirSeguinteCompativel(empresaId, caminhao.getId(), estado, null);
 
         Instant agora = agora();
         Viagem v = nova(empresaId, caminhao);
@@ -194,6 +198,7 @@ public class ViagemService {
             a.setCriadoPor(autor);
             a.setTipo(item.tipo());
             a.setData(item.data());
+            a.setHora(item.hora());
             a.setLitros(item.litros());
             a.setValorTotal(item.valorTotal());
             abastecimentos.save(a);
@@ -310,8 +315,9 @@ public class ViagemService {
             // Cancelada continua com o período fechado; os demais dados podem ficar incompletos.
             throw RegraNegocioException.invalido("Viagem cancelada precisa manter a data final.");
         }
-        validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        validarDatasDosLancamentos(v, empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
+        exigirSeguinteCompativel(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         Map<String, String> antes = v.isEncerrada() ? AuditoriaViagem.campos(v) : null;
         estado.aplicar(v);
@@ -342,8 +348,9 @@ public class ViagemService {
                 req.consumoMedioCarregado() != null ? req.consumoMedioCarregado() : v.getConsumoMedioCarregado());
         estado.validarCoerencia(politica.limites());
         estado.validarCompleta();
-        validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        validarDatasDosLancamentos(v, empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
+        exigirSeguinteCompativel(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
         v.setStatus(StatusViagem.FINALIZADA);
@@ -385,8 +392,9 @@ public class ViagemService {
                 req.consumoMedioVazio() != null ? req.consumoMedioVazio() : v.getConsumoMedioVazio(),
                 req.consumoMedioCarregado() != null ? req.consumoMedioCarregado() : v.getConsumoMedioCarregado());
         estado.validarCoerencia(politica.limites());
-        validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        validarDatasDosLancamentos(v, empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
+        exigirSeguinteCompativel(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
         v.cancelar(usuarios.getReferenceById(logado.usuarioId()), motivo, agora());
@@ -531,19 +539,67 @@ public class ViagemService {
                 logado.isMotorista() ? null : rentabilidade.calcular(empresaId, v));
     }
 
-    /** Todos os lançamentos precisam estar entre a data de início e a data final da viagem. */
-    private void validarDatasDosLancamentos(Long viagemId, Long empresaId, Estado estado) {
-        boolean foraDoPeriodo = Stream.concat(
-                abastecimentos.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(viagemId, empresaId)
-                        .stream().map(Abastecimento::getData),
-                despesas.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(viagemId, empresaId)
-                        .stream().map(Despesa::getData))
+    /**
+     * Pedágios e despesas precisam estar entre a data de início e a data final
+     * da viagem. Abastecimentos também, ou antes do início, a partir do fim da
+     * viagem anterior do caminhão (RegrasLancamento.validarDataAbastecimento).
+     * Chamado quando as datas da viagem mudam, com o estado candidato.
+     */
+    private void validarDatasDosLancamentos(Viagem v, Long empresaId, Estado estado) {
+        boolean despesaForaDoPeriodo = despesas.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(
+                        v.getId(), empresaId).stream()
+                .map(Despesa::getData)
                 .anyMatch(data -> data.isBefore(estado.dataInicio())
                         || (estado.dataFim() != null && data.isAfter(estado.dataFim())));
-        if (foraDoPeriodo) {
+        List<Abastecimento> lista =
+                abastecimentos.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(v.getId(), empresaId);
+        boolean abastecimentoDepoisDoFim = lista.stream()
+                .anyMatch(a -> estado.dataFim() != null && a.getData().isAfter(estado.dataFim()));
+        if (despesaForaDoPeriodo || abastecimentoDepoisDoFim) {
             throw RegraNegocioException.invalido(
                     "Há abastecimentos ou despesas com data fora do período da viagem.");
         }
+        if (lista.stream().anyMatch(a -> a.getData().isBefore(estado.dataInicio()))) {
+            LocalDate fimAnterior = fimDaAnterior(empresaId, v.getCaminhao().getId(), estado.dataInicio(), v.getId());
+            for (Abastecimento a : lista) {
+                RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), estado.dataFim(), fimAnterior,
+                        a.getData(), null);
+            }
+        }
+    }
+
+    /** Data final da viagem do caminhão que começou imediatamente antes de inicio; nula se não houver. */
+    private LocalDate fimDaAnterior(Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId) {
+        return viagens.anterior(empresaId, caminhaoId, inicio, ignorarId).map(Viagem::getDataFim).orElse(null);
+    }
+
+    /** Data de um abastecimento novo ou corrigido da viagem (usado por LancamentoService). */
+    void validarDataAbastecimento(Viagem v, Long empresaId, LocalDate data, LocalTime hora) {
+        LocalDate fimAnterior = data.isBefore(v.getDataInicio())
+                ? fimDaAnterior(empresaId, v.getCaminhao().getId(), v.getDataInicio(), v.getId())
+                : null;
+        RegrasLancamento.validarDataAbastecimento(v.getDataInicio(), v.getDataFim(), fimAnterior, data, hora);
+    }
+
+    /**
+     * A viagem seguinte do caminhão pode ter abastecimentos feitos antes do
+     * início dela, depois do fim desta. A data final desta viagem não pode
+     * passar deles: senão esses abastecimentos ficariam dentro do período
+     * desta, associados à viagem errada. Deve ser chamado com o caminhão
+     * bloqueado e depois da checagem de sobreposição.
+     */
+    private void exigirSeguinteCompativel(Long empresaId, Long caminhaoId, Estado estado, Long ignorarId) {
+        if (estado.dataFim() == null) {
+            return;
+        }
+        viagens.seguinte(empresaId, caminhaoId, estado.dataInicio(), ignorarId)
+                .filter(seguinte -> abastecimentos.existsByViagemIdAndViagemEmpresaIdAndDataBefore(
+                        seguinte.getId(), empresaId, estado.dataFim()))
+                .ifPresent(seguinte -> {
+                    throw RegraNegocioException.conflito("A viagem seguinte do caminhão tem abastecimento"
+                            + " feito antes do início dela, com data anterior à data final informada. A data"
+                            + " final desta viagem não pode passar desse abastecimento.");
+                });
     }
 
     /**

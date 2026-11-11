@@ -1,6 +1,7 @@
 package br.com.frotamais.viagem;
 
 import java.util.Collection;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,9 @@ public interface AbastecimentoRepository extends JpaRepository<Abastecimento, Lo
             Long id, Long viagemId, Long empresaId);
 
     /** Totais de diesel por viagem dos caminhões informados, para o preço médio. */
+    /** Algum abastecimento da viagem com data anterior a data? */
+    boolean existsByViagemIdAndViagemEmpresaIdAndDataBefore(Long viagemId, Long empresaId, LocalDate data);
+
     @Query("""
             select new br.com.frotamais.viagem.TotaisDiesel(
                 v.id, v.caminhao.id, v.dataInicio, sum(a.litros), sum(a.valorTotal))

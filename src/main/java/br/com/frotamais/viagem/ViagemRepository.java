@@ -59,6 +59,24 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             @Param("fim") LocalDate fim,
             @Param("ignorarId") Long ignorarId);
 
+    /** Viagem do caminhão que começou imediatamente antes de inicio (ignorarId: a própria viagem). */
+    Optional<Viagem> findFirstByEmpresaIdAndCaminhaoIdAndDataInicioBeforeAndIdNotOrderByDataInicioDesc(
+            Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId);
+
+    /** Viagem do caminhão que começou imediatamente depois de inicio (ignorarId: a própria viagem). */
+    Optional<Viagem> findFirstByEmpresaIdAndCaminhaoIdAndDataInicioAfterAndIdNotOrderByDataInicioAsc(
+            Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId);
+
+    default Optional<Viagem> anterior(Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId) {
+        return findFirstByEmpresaIdAndCaminhaoIdAndDataInicioBeforeAndIdNotOrderByDataInicioDesc(
+                empresaId, caminhaoId, inicio, ignorarId != null ? ignorarId : 0L);
+    }
+
+    default Optional<Viagem> seguinte(Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId) {
+        return findFirstByEmpresaIdAndCaminhaoIdAndDataInicioAfterAndIdNotOrderByDataInicioAsc(
+                empresaId, caminhaoId, inicio, ignorarId != null ? ignorarId : 0L);
+    }
+
     @Query("""
             select v from Viagem v join fetch v.caminhao c left join fetch v.motorista
             where v.empresa.id = :empresaId

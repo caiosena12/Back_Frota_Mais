@@ -49,7 +49,8 @@ public class LancamentoService {
     // ---- Abastecimentos (diesel e Arla) ----
 
     public AbastecimentoResponse adicionarAbastecimento(Long viagemId, AbastecimentoRequest req) {
-        Viagem v = viagemParaIncluir(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, null);
+        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
         validarAbastecimento(v, req);
         Abastecimento a = new Abastecimento();
         a.setViagem(v);
@@ -59,7 +60,8 @@ public class LancamentoService {
     }
 
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaLancar(viagemId, null);
+        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
         validarAbastecimento(v, req);
         Abastecimento a = abastecimento(v, id);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
@@ -151,8 +153,11 @@ public class LancamentoService {
         return v;
     }
 
+    /** data nula: a data é validada pelo chamador (abastecimento, que tem regra própria). */
     private static void validarData(Viagem v, LocalDate data) {
-        RegrasLancamento.validarData(v.getDataInicio(), v.getDataFim(), data);
+        if (data != null) {
+            RegrasLancamento.validarData(v.getDataInicio(), v.getDataFim(), data);
+        }
         v.marcarAlteracao();
     }
 
@@ -206,6 +211,7 @@ public class LancamentoService {
     private static void preencher(Abastecimento a, AbastecimentoRequest req) {
         a.setTipo(req.tipo());
         a.setData(req.data());
+        a.setHora(req.hora());
         a.setLitros(req.litros());
         a.setValorTotal(req.valorTotal());
     }
