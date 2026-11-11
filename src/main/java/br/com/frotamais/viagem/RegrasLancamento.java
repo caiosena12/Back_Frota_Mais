@@ -42,9 +42,9 @@ final class RegrasLancamento {
      * preservada e o abastecimento compõe o diesel desta viagem, não o da
      * anterior.
      *
-     * fimAnterior nulo: não há viagem anterior (primeiro frete do caminhão).
-     * O tratamento desse caso ainda não foi definido, então o abastecimento
-     * anterior ao início é recusado, sem inventar um limite.
+     * fimAnterior nulo: não há viagem anterior (primeiro frete registrado do
+     * caminhão). Abastecimentos anteriores ao início são aceitos sem limite de
+     * dias: todo abastecimento feito fora de uma viagem pertence à seguinte.
      */
     static void validarDataAbastecimento(LocalDate inicio, LocalDate fim, LocalDate fimAnterior,
             LocalDate data, LocalTime hora) {
@@ -55,12 +55,7 @@ final class RegrasLancamento {
             validarData(inicio, fim, data);
             return;
         }
-        if (fimAnterior == null) {
-            throw RegraNegocioException.invalido("Abastecimento anterior ao início da viagem só é aceito quando"
-                    + " o caminhão tem uma viagem anterior, e a partir do fim dela. Para o primeiro frete do"
-                    + " caminhão, esse caso ainda não foi definido.");
-        }
-        if (data.isBefore(fimAnterior)) {
+        if (fimAnterior != null && data.isBefore(fimAnterior)) {
             throw RegraNegocioException.invalido("Abastecimento anterior ao início da viagem precisa ter"
                     + " ocorrido a partir do fim da viagem anterior do caminhão (" + fimAnterior + ").");
         }

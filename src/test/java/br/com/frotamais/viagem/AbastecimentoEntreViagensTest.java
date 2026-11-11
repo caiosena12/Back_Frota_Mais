@@ -15,8 +15,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * Abastecimento feito entre duas viagens: pertence à seguinte, com a data
  * real preservada, desde que a partir do fim da anterior e antes do início
- * da seguinte. Não altera a anterior nem é contado duas vezes. Para o
- * primeiro frete do caminhão (sem anterior) ainda não há regra: é recusado.
+ * da seguinte. Não altera a anterior nem é contado duas vezes. No primeiro
+ * frete do caminhão (sem anterior), não há limite de dias.
  */
 class AbastecimentoEntreViagensTest extends ApiViagemTeste {
 
@@ -82,16 +82,31 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
     }
 
     @Test
-    void primeiroFreteDoCaminhaoNaoAceitaAbastecimentoAnterior() throws Exception {
+    void primeiroFreteAceitaAbastecimentoAnteriorSemLimiteDeDias() throws Exception {
         long outro = criarCaminhao(dono);
         long primeira = criarViagem(dono, corpo("caminhaoId", outro, "dataInicio", "2025-06-10",
                 "kmInicialCarregado", 0));
-        erro(abastecer(dono, primeira, "2025-06-09", null, 400), "primeiro frete");
-        erro(chamar(POST(VIAGENS + "/historicas"), dono, corpo("caminhaoId", outro, "dataInicio", "2025-05-10",
-                "dataFim", "2025-05-12", "origem", "X", "destino", "Y", "valorFrete", "500.00",
-                "kmInicialCarregado", 0, "kmFinalCarregado", 100, "consumoMedioCarregado", "2.50",
-                "abastecimentos", java.util.List.of(corpo("tipo", "DIESEL", "data", "2025-05-09",
-                        "litros", "50", "valorTotal", "300.00"))), 400), "primeiro frete");
+        JsonNode a = abastecer(dono, primeira, "2024-01-15", "07:00", 201);
+        assertEquals("2024-01-15", a.get("data").asString());
+        JsonNode h = chamar(POST(VIAGENS + "/historicas"), dono, corpo("caminhaoId", criarCaminhao(dono),
+                "dataInicio", "2025-05-10", "dataFim", "2025-05-12", "origem", "X", "destino", "Y",
+                "valorFrete", "500.00", "kmInicialCarregado", 0, "kmFinalCarregado", 100,
+                "consumoMedioCarregado", "2.50", "abastecimentos", java.util.List.of(corpo("tipo", "DIESEL",
+                        "data", "2025-03-01", "litros", "50", "valorTotal", "300.00"))), 201);
+        assertEquals("2025-03-01", h.get("abastecimentosDiesel").get(0).get("data").asString());
+    }
+
+    @Test
+    void historicaAntesDoPrimeiroFreteNaoEngoleSeusAbastecimentosAnteriores() throws Exception {
+        long outro = criarCaminhao(dono);
+        long primeira = criarViagem(dono, corpo("caminhaoId", outro, "dataInicio", "2025-06-10",
+                "kmInicialCarregado", 0));
+        abastecer(dono, primeira, "2025-06-01", null, 201);
+        // Uma histórica que termina depois do abastecimento antecipado ficaria com ele no período.
+        erro(chamar(POST(VIAGENS + "/historicas"), dono, corpo("caminhaoId", outro, "dataInicio", "2025-05-20",
+                "dataFim", "2025-06-02", "origem", "X", "destino", "Y", "valorFrete", "500.00",
+                "kmInicialCarregado", 0, "kmFinalCarregado", 100, "consumoMedioCarregado", "2.50"), 409),
+                "viagem seguinte");
     }
 
     @Test

@@ -137,11 +137,21 @@ public class ViagemService {
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
         estado.validarCoerencia(politica.limites());
         exigirSemSobreposicao(empresaId, caminhao.getId(), estado, null);
+        // Abastecimentos iniciais: tudo validado antes de gravar a viagem, para
+        // um item inválido não deixar nada criado pela metade.
+        LocalDate fimAnterior = fimDaAnterior(empresaId, caminhao.getId(), estado.dataInicio(), null);
+        for (AbastecimentoRequest a : req.abastecimentosOuVazio()) {
+            RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), null, fimAnterior, a.data(), a.hora());
+            RegrasLancamento.validarAbastecimento(caminhao, a, politica.limites());
+        }
 
         Viagem v = nova(empresaId, caminhao);
         estado.aplicar(v);
         v.setMotorista(motorista);
         viagens.save(v);
+        for (AbastecimentoRequest item : req.abastecimentosOuVazio()) {
+            abastecimentos.save(novoAbastecimento(v, v.getCriadoPor(), item));
+        }
         return detalhar(empresaId, v);
     }
 
@@ -193,15 +203,7 @@ public class ViagemService {
 
         Usuario autor = v.getCriadoPor();
         for (AbastecimentoRequest item : req.abastecimentosOuVazio()) {
-            Abastecimento a = new Abastecimento();
-            a.setViagem(v);
-            a.setCriadoPor(autor);
-            a.setTipo(item.tipo());
-            a.setData(item.data());
-            a.setHora(item.hora());
-            a.setLitros(item.litros());
-            a.setValorTotal(item.valorTotal());
-            abastecimentos.save(a);
+            abastecimentos.save(novoAbastecimento(v, autor, item));
         }
         for (PedagioRequest p : req.pedagiosOuVazio()) {
             despesas.save(despesa(v, autor, TipoDespesa.PEDAGIO, null, p.data(), p.valor()));
@@ -213,6 +215,18 @@ public class ViagemService {
 
         consolidar(empresaId, v, true);
         return detalhar(empresaId, v);
+    }
+
+    private static Abastecimento novoAbastecimento(Viagem v, Usuario autor, AbastecimentoRequest item) {
+        Abastecimento a = new Abastecimento();
+        a.setViagem(v);
+        a.setCriadoPor(autor);
+        a.setTipo(item.tipo());
+        a.setData(item.data());
+        a.setHora(item.hora());
+        a.setLitros(item.litros());
+        a.setValorTotal(item.valorTotal());
+        return a;
     }
 
     private Viagem nova(Long empresaId, Caminhao caminhao) {

@@ -121,8 +121,9 @@ class ViagemValidacaoTest extends ApiViagemTeste {
         chamar(POST(url), token, corpo("tipo", "DIESEL", "data", "2025-05-10", "litros", "10", "valorTotal", "-1.00"), 400);
         chamar(POST(url), token, corpo("data", "2025-05-10", "litros", "10", "valorTotal", "10.00"), 400);
         chamar(POST(url), token, corpo("tipo", "GASOLINA", "data", "2025-05-10", "litros", "10", "valorTotal", "10.00"), 400);
-        erro(chamar(POST(url), token, corpo("tipo", "DIESEL", "data", "2025-05-09", "litros", "10",
-                "valorTotal", "60.00"), 400), "anterior ao início");
+        // Abastecimento anterior ao início é aceito (fora de viagem, vai para a seguinte); pedágio, não.
+        erro(chamar(POST(VIAGENS + "/" + id + "/pedagios"), token, corpo("data", "2025-05-09",
+                "valor", "10.00"), 400), "anterior ao início");
         erro(chamar(POST(url), token, corpo("tipo", "DIESEL", "data", AMANHA, "litros", "10",
                 "valorTotal", "60.00"), 400), "futuro");
 
