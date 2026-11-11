@@ -27,5 +27,19 @@ public interface ConviteRepository extends JpaRepository<Convite, Long> {
     List<Convite> pendentes(@Param("empresaId") Long empresaId, @Param("usuarioId") Long usuarioId,
             @Param("agora") Instant agora);
 
+    /**
+     * Mesmos convites de pendentes(...), bloqueados: um cancelamento e uma
+     * ativação simultâneos com o mesmo link não passam os dois. Quem chega
+     * depois enxerga o convite já usado ou já invalidado.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select c from Convite c
+            where c.usuario.id = :usuarioId and c.empresa.id = :empresaId
+              and c.usadoEm is null and c.invalidadoEm is null and c.expiraEm > :agora
+            """)
+    List<Convite> travarPendentes(@Param("empresaId") Long empresaId, @Param("usuarioId") Long usuarioId,
+            @Param("agora") Instant agora);
+
     Optional<Convite> findFirstByUsuarioIdAndEmpresaIdOrderByCriadoEmDescIdDesc(Long usuarioId, Long empresaId);
 }

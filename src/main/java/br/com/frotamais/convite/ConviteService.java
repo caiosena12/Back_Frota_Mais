@@ -94,6 +94,25 @@ public class ConviteService {
         return expira;
     }
 
+    /**
+     * Cancela o convite pendente do usuário: o link deixa de valer na hora. O
+     * registro fica (invalidado), e a conta continua aguardando ativação; o
+     * dono pode enviar um novo convite depois. Não envia e-mail.
+     */
+    public void cancelar(Usuario convidado) {
+        if (!convidado.isAtivacaoPendente()) {
+            throw RegraNegocioException.conflito("O motorista já ativou a conta; não há convite a cancelar.");
+        }
+        Instant agora = Datas.agora();
+        var pendentes = convites.travarPendentes(convidado.getEmpresa().getId(), convidado.getId(), agora);
+        if (pendentes.isEmpty()) {
+            throw RegraNegocioException.conflito(
+                    "Não há convite pendente para cancelar: ele já foi usado, cancelado ou expirou.");
+        }
+        pendentes.forEach(c -> c.invalidar(agora));
+        log.info("Convite de ativação do usuário {} cancelado.", convidado.getId());
+    }
+
     /** Ativa a conta com a senha escolhida pelo próprio convidado e já devolve o login. */
     public TokenResponse ativar(String token, String senha) {
         Convite convite = convites.travarPorHash(hash(token))

@@ -22,7 +22,7 @@ import br.com.frotamais.usuario.UsuarioRepository;
 
 /**
  * Motoristas da empresa do dono logado: cadastro por convite, vínculos com
- * caminhões, desativação e reenvio de convite.
+ * caminhões, desativação, reenvio e cancelamento de convite.
  *
  * Isolamento: o motorista é sempre buscado por id + empresaId do token + perfil
  * MOTORISTA; os caminhões, por id + empresaId. Fora disso, 404.
@@ -118,6 +118,13 @@ public class MotoristaService {
     public MotoristaResponse reenviarConvite(Long id) {
         Usuario motorista = motorista(id);
         convites.enviar(motorista, usuarios.getReferenceById(logado.usuarioId()));
+        return resposta(motorista);
+    }
+
+    /** Cancela o convite pendente; a conta continua aguardando ativação (situação CONVITE_PENDENTE, sem expiração). */
+    public MotoristaResponse cancelarConvite(Long id) {
+        Usuario motorista = motorista(id);
+        convites.cancelar(motorista);
         return resposta(motorista);
     }
 

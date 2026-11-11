@@ -293,4 +293,62 @@ class MotoristaConviteTest extends ApiViagemTeste {
         chamar(POST("/api/auth/login"), null, corpo("email", email, "senha", "Nova12345"), 200);
         chamar(POST("/api/auth/senha"), null, corpo("senhaAtual", "Nova12345", "novaSenha", "Outra12345"), 401);
     }
+
+    @Test
+    void conviteValePor24HorasPorPadrao() throws Exception {
+        java.time.Instant antes = java.time.Instant.now();
+        JsonNode m = convidar(emailNovo());
+        java.time.Instant expira = java.time.Instant.parse(m.get("conviteExpiraEm").asString());
+        java.time.Duration validade = java.time.Duration.between(antes, expira);
+        assertTrue(validade.compareTo(java.time.Duration.ofHours(24).minusMinutes(1)) > 0, validade::toString);
+        assertTrue(validade.compareTo(java.time.Duration.ofHours(24).plusMinutes(1)) < 0, validade::toString);
+    }
+
+    @Test
+    void donoCancelaConvitePendenteEOLinkDeixaDeValer() throws Exception {
+        String email = emailNovo();
+        long id = convidar(email, caminhaoA).get("id").asLong();
+        String token = caixa.ultimoToken(email);
+        int enviados = caixa.paraEndereco(email).size();
+
+        JsonNode m = chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), dono, null, 200);
+        assertEquals("CONVITE_PENDENTE", m.get("situacao").asString());   // conta segue aguardando ativação
+        assertTrue(m.get("conviteExpiraEm").isNull());
+        assertEquals(List.of(caminhaoA), List.of(m.get("caminhaoIds").get(0).asLong()));
+        assertEquals(enviados, caixa.paraEndereco(email).size(), "cancelar não envia e-mail");
+
+        erro(ativar(token, "Motorista123", 400), "Convite inválido");
+        // O registro continua no banco, só invalidado.
+        em.flush();
+        assertEquals(1, jdbc.queryForObject(
+                "select count(*) from convites where usuario_id = ? and invalidado_em is not null",
+                Integer.class, id));
+
+        // Nada mais a cancelar; um novo convite volta a funcionar.
+        erro(chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), dono, null, 409), "Não há convite pendente");
+        chamar(POST(MOTORISTAS + "/" + id + "/convite"), dono, null, 200);
+        ativar(caixa.ultimoToken(email), "Motorista123", 200);
+    }
+
+    @Test
+    void conviteDeContaAtivadaNaoECancelado() throws Exception {
+        String email = emailNovo();
+        motoristaAtivo(email, caminhaoA);
+        long id = chamar(GET(MOTORISTAS), dono, null, 200).get(0).get("id").asLong();
+        erro(chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), dono, null, 409), "já ativou");
+    }
+
+    @Test
+    void cancelarConviteSoPeloDonoDaEmpresa() throws Exception {
+        String email = emailNovo();
+        long id = convidar(email).get("id").asLong();
+        String token = caixa.ultimoToken(email);
+        String motorista = motoristaAtivo(emailNovo(), caminhaoA);
+
+        chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), motorista, null, 403);
+        chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), registrar().token(), null, 404);
+        chamar(DELETE(MOTORISTAS + "/" + id + "/convite"), null, null, 401);
+        // Nenhuma tentativa recusada invalidou o convite.
+        ativar(token, "Motorista123", 200);
+    }
 }

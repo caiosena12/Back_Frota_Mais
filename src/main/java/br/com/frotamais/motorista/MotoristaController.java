@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,5 +58,11 @@ public class MotoristaController {
     @PostMapping("/{id}/convite")
     public MotoristaResponse reenviarConvite(@PathVariable Long id) {
         return service.reenviarConvite(id);
+    }
+
+    /** Cancela o convite pendente (o link deixa de valer). Conta já ativada ou sem convite pendente: 409. */
+    @DeleteMapping("/{id}/convite")
+    public MotoristaResponse cancelarConvite(@PathVariable Long id) {
+        return service.cancelarConvite(id);
     }
 }

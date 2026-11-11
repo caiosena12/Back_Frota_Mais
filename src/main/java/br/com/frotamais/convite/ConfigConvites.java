@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 /**
  * Configuração dos convites.
  *
- * app.convites.validade-horas: validade do link. O padrão de 24 h é a sugestão
- * inicial do produto, ainda não confirmada como regra definitiva.
+ * app.convites.validade-horas: validade do link. Padrão: 24 h, a regra do
+ * produto; outro valor só por configuração explícita.
  * app.convites.url-ativacao: página do front-end que recebe ?token=... e
  * chama POST /api/convites/ativacao. Sem ela nenhum convite é enviado.
  */
