@@ -21,14 +21,23 @@ batem com o banco e **nunca altera o schema**.
 |---|---|
 | V1 | Schema no commit `3e5b9c1`, quando era gerado pelo Hibernate. Baseline dos bancos antigos. |
 | V2 | Índices nas chaves estrangeiras (`abastecimentos.viagem_id`, `despesas_viagem.viagem_id`, `usuarios.empresa_id`) e `viagens (caminhao_id, data_inicio)`. |
+| V3 | Caminhões: `marca`, `eixos` (nulos nos antigos), status `EXCLUIDO`, `inativado_em`, `excluido_em`; placa única só entre os não excluídos da empresa. |
+| V4 | `motorista_caminhoes`: vínculo motorista–caminhão. |
+| V5 | Convites: `usuarios.senha_hash` anulável (ativação pendente) e tabela `convites` (só o hash do token). |
+| V6 | `viagens.motorista_id`: motorista responsável. |
+| V7 | Cancelamento: status `CANCELADA` e colunas `cancelada_em`, `cancelada_por_id`, `motivo_cancelamento`. |
+| V8 | Auditoria: `viagem_alteracoes` e `viagem_fotografias_anteriores`. |
+| V9 | `abastecimentos.hora` (opcional; registros antigos ficam sem hora). |
+| V10 | `manutencoes`. |
 
-As versões seguintes estão descritas no comentário do topo de cada arquivo.
+Detalhes no comentário do topo de cada arquivo. Nenhuma versão apaga dados.
 
 ## Cenários
 
 ### 1. Instalação nova ou banco vazio
 
-Crie o banco vazio e suba a aplicação. O Flyway aplica todas as versões.
+Crie o banco vazio e suba a aplicação. O Flyway aplica todas as versões. Fora
+do perfil `dev`, informe `DB_URL`, `DB_USER` e `DB_PASSWORD`.
 
 ```bash
 psql -h localhost -U postgres -c "CREATE DATABASE frotamais"
@@ -73,6 +82,12 @@ Ele foi conferido em cópias descartáveis do `frotamais` e de um banco completo
 gerado pelo Hibernate. Nos dois casos, o schema resultante ficou idêntico ao de
 um banco montado só pela V1 (colunas, tipos, restrições e índices), com os dados
 preservados. Reexecutar o script não altera nada.
+
+Em 11/11/2026, o procedimento completo (script + passo 4) foi repetido numa
+cópia descartável do `frotamais`, com a aplicação em perfil `dev`: baseline em
+V1, V2 a V10 aplicadas, aplicação no ar, e as 17 empresas, 17 usuários e 8
+caminhões preservados. Os caminhões antigos ficam com `marca` e `eixos` nulos
+até serem editados.
 
 **Procedimento (exige autorização do responsável, pois remove uma restrição e
 uma coluna vazia):**

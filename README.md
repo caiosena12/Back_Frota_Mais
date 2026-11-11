@@ -2,43 +2,41 @@
 
 ### Gestão que move resultados.
 
-O **Frota+** é um sistema web de gestão financeira para caminhoneiros autônomos e pequenas frotas. A proposta é substituir o controle no papel e mostrar o lucro de cada viagem, considerando quilometragem, combustível, pedágios, receitas e despesas.
+O **Frota+** é um sistema web de gestão financeira para caminhoneiros autônomos e pequenas frotas. A proposta é substituir o controle no papel e mostrar o lucro de cada viagem, considerando quilometragem, combustível, pedágios, receitas, despesas e manutenções.
 
 Este repositório contém a **API REST do back-end**. O front-end em Angular ainda não foi iniciado.
 
-> **Projeto em desenvolvimento.** Hoje a API tem autenticação, separação por empresa e gestão de caminhões. Viagens, abastecimentos, despesas, relatórios e dashboards ainda não existem.
+> **Projeto em desenvolvimento.** A API já cobre empresas, usuários, caminhões, motoristas, viagens, lançamentos, manutenções e indicadores financeiros. Dashboards e relatórios visuais dependem do front-end.
 
 ---
 
 ## 📌 Situação atual
 
-| Implementado | Planejado, ainda sem código |
+| Implementado | Planejado ou pendente |
 |---|---|
-| Registro de empresa com o primeiro usuário DONO | Criação e gestão de motoristas |
-| Login com JWT | Vínculo entre motorista e caminhão |
-| Perfis DONO e MOTORISTA | Viagens e trechos |
-| Separação de dados por empresa em caminhões | Abastecimentos de diesel e Arla |
-| Cadastro, consulta, alteração e exclusão de caminhões | Despesas e manutenções |
-| Testes automatizados em banco exclusivo | Análise financeira, dashboards e relatórios |
-| | Front-end em Angular |
+| Registro de empresa com o primeiro usuário DONO; login com JWT | Front-end em Angular |
+| Perfis DONO e MOTORISTA, com isolamento por empresa | Dashboards e relatórios visuais, exportação |
+| Caminhões com marca, eixos, inativação e exclusão lógica | Viagens canceladas no resultado mensal (data de referência pendente) |
+| Motoristas por convite de e-mail, com vínculo aos caminhões | Abastecimento anterior ao primeiro frete do caminhão (regra pendente) |
+| Viagens: abertura, finalização, cancelamento, viagem histórica, motorista responsável | Rate limit em login, registro e ativação |
+| Abastecimentos de diesel e Arla (inclusive entre viagens), pedágios e despesas extras | CORS (depende da estratégia do Angular) |
+| Rentabilidade por frete, com fotografia financeira e auditoria das correções | |
+| Manutenções por caminhão e indicadores por período e por caminhão | |
+| Schema versionado (Flyway), CI e testes em banco exclusivo | |
 
-**Limitações conhecidas:**
-
-- Ainda não há como criar um usuário MOTORISTA pela API.
-- Todo usuário autenticado vê todos os caminhões da própria empresa. A regra de o motorista ver só os caminhões dele depende do vínculo, que ainda não existe.
-- O e-mail é único em todo o sistema, embora a regra de negócio permita usar o mesmo e-mail em empresas diferentes.
+Os endpoints estão em [`docs/API.md`](docs/API.md).
 
 ## 🛠️ Tecnologias
 
-| Tecnologia | Uso | Situação |
-|---|---|---|
-| **Java 21** | Linguagem do back-end | Em uso |
-| **Spring Boot 4.1.1** | API REST | Em uso |
-| **Spring Data JPA** | Persistência | Em uso |
-| **PostgreSQL 16** | Banco de dados | Em uso |
-| **Spring Security + JWT** | Autenticação e autorização | Em uso |
-| **JUnit e MockMvc** | Testes automatizados | Em uso |
-| **Angular** | Interface web | Planejado |
+| Tecnologia | Uso |
+|---|---|
+| **Java 21** e **Spring Boot 4.1.1** | API REST |
+| **Spring Data JPA** e **PostgreSQL 16** | Persistência |
+| **Flyway** | Migrations do schema |
+| **Spring Security + JWT** | Autenticação e autorização |
+| **Spring Mail** | Convites por e-mail (SMTP opcional) |
+| **JUnit e MockMvc** | Testes automatizados |
+| **GitHub Actions** | Integração contínua |
 
 ## 🏗️ Arquitetura
 
@@ -46,52 +44,53 @@ Monólito Spring Boot organizado por funcionalidade, em `br.com.frotamais`:
 
 | Pacote | Responsabilidade |
 |---|---|
-| `auth` | Registro, login e tratamento de erros de validação |
-| `caminhao` | Gestão de caminhões |
+| `auth` | Registro, login e troca de senha |
+| `caminhao` | Caminhões e acesso por vínculo do motorista |
+| `comum` | Erros padronizados, datas e fuso |
+| `convite` | Convites de ativação de motoristas |
+| `email` | Envio de e-mail (SMTP ou indisponível) |
 | `empresa` | Empresas |
-| `seguranca` | Configuração do Spring Security e dos tokens |
-| `usuario` | Usuários e perfis |
+| `manutencao` | Manutenções dos caminhões |
+| `motorista` | Cadastro de motoristas e vínculos |
+| `seguranca` | Spring Security e tokens |
+| `usuario` | Usuários, perfis e política de senha |
+| `viagem` | Viagens, lançamentos, rentabilidade, auditoria e indicadores |
 
 Cada funcionalidade segue o fluxo **Controller → Service → Repository → banco**, com entidades JPA separadas dos DTOs de entrada e saída.
 
-O schema do banco é gerado pelo Hibernate (`ddl-auto=update`). Ainda não há migrations.
+O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o Hibernate só confere se as entidades batem com ele (`ddl-auto=validate`). Detalhes em [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md).
 
 ## 🔐 Segurança
 
-### Autenticação
+- Senhas com BCrypt, de 8 caracteres a 72 bytes, com letra e número.
+- Login devolve um JWT HS256, válido por 8 horas por padrão (`JWT_HORAS`, de 1 a 24). A chave vem de `JWT_SECRET` (Base64, ≥ 32 bytes); sem ela, a API não sobe.
+- A cada requisição, a API valida o token e recarrega o usuário do banco: ele precisa estar ativo e pertencer à empresa do token. O perfil usado na autorização vem **do banco**.
+- A empresa nunca vem do corpo da requisição. Recurso de outra empresa responde `404`.
+- O MOTORISTA só alcança os caminhões vinculados a ele e as viagens desses caminhões, e não vê informações financeiras gerenciais.
+- Convites: token aleatório de uso único, guardado só como hash, com validade configurável.
+- Todos os erros seguem o formato `{"status","erro","detalhes"}`, sem stack trace.
 
-- As senhas são guardadas com BCrypt.
-- O login devolve um JWT HS256, válido por 8 horas por padrão (`JWT_HORAS`, de 1 a 24).
-- A chave vem da variável `JWT_SECRET`, em Base64, com pelo menos 32 bytes. Sem ela, a API não sobe.
-- Rotas protegidas exigem o cabeçalho `Authorization: Bearer <token>`.
+## ⚙️ Configuração
 
-A cada requisição, a API valida a assinatura, a validade e o emissor do token, e também consulta o usuário no banco. Ele precisa estar ativo e pertencer à empresa indicada no token. O perfil usado na autorização vem **do banco**, então desativar um usuário ou mudar o perfil dele vale na hora, mesmo com um token já emitido.
+| Variável | Uso | Padrão |
+|---|---|---|
+| `JWT_SECRET` | Chave do JWT (Base64, ≥ 32 bytes) | nenhum: obrigatória |
+| `JWT_HORAS` | Validade do token | `8` |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD` | Conexão com o PostgreSQL | obrigatórias, exceto no perfil `dev` |
+| `SPRING_PROFILES_ACTIVE` | `dev` para desenvolvimento local | o `run-dev-frotamais.sh` usa `dev` |
+| `EMAIL_REMETENTE` | Remetente dos convites | vazio (e-mail desligado) |
+| `CONVITE_URL_ATIVACAO` | Endereço da tela de ativação; o token vai como parâmetro | vazio (e-mail desligado) |
+| `CONVITE_VALIDADE_HORAS` | Validade do convite (1 a 720) | `24` |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | Servidor SMTP | vazio |
+| `JPA_SHOW_SQL` | Mostra o SQL no log | `false` |
 
-### Permissões
-
-| Rota | Acesso |
-|---|---|
-| `POST /api/auth/registro` | Público |
-| `POST /api/auth/login` | Público |
-| `GET /api/caminhoes` | Usuário autenticado |
-| `GET /api/caminhoes/{id}` | Usuário autenticado |
-| `POST /api/caminhoes` | Somente DONO |
-| `PUT /api/caminhoes/{id}` | Somente DONO |
-| `DELETE /api/caminhoes/{id}` | Somente DONO |
-
-O registro público sempre cria uma empresa nova e o usuário DONO dela. O cliente não escolhe o perfil.
-
-### Isolamento por empresa
-
-Em caminhões, a empresa nunca vem do corpo da requisição: ela sai do usuário autenticado. Um caminhão de outra empresa responde `404`, como se não existisse.
-
-Essa proteção é aplicada consulta a consulta, nos métodos do repositório de caminhões. Toda funcionalidade nova precisa fazer o mesmo e comprovar isso com testes.
+- **Perfil `dev`** (`application-dev.properties`): conecta ao `frotamais` local com as credenciais do dev container. Nunca use em produção.
+- **Sem perfil** (produção): nenhuma credencial tem valor padrão.
+- **E-mail:** sem SMTP, remetente e URL de ativação, as operações que enviam convite respondem `503` e não gravam nada. Nenhum serviço de e-mail vem configurado.
 
 ## ▶️ Como executar
 
-O ambiente recomendado é o **GitHub Codespaces**. O dev container já traz Java 21 e PostgreSQL 16, com o banco de desenvolvimento `frotamais` em `localhost:5432`.
-
-Fora dele, são necessários Java 21 e PostgreSQL 16. As variáveis `DB_URL`, `DB_USER` e `DB_PASSWORD` configuram a conexão.
+O ambiente recomendado é o **GitHub Codespaces**, com Java 21 e PostgreSQL 16 em `localhost:5432`.
 
 ### 1. Crie a chave JWT
 
@@ -104,7 +103,11 @@ chmod 600 .frotamais-jwt.env
 
 O arquivo `.frotamais-jwt.env` é ignorado pelo Git. Nunca o publique.
 
-### 2. Inicie a API
+### 2. Prepare o banco de desenvolvimento
+
+Num banco **novo e vazio**, o Flyway cria tudo na primeira subida. Num banco `frotamais` criado antes do Flyway, siga **antes** o procedimento de adoção de [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md). Sem isso, a API recusa a subida.
+
+### 3. Inicie a API
 
 Em um terminal dedicado:
 
@@ -112,7 +115,7 @@ Em um terminal dedicado:
 ./run-dev-frotamais.sh
 ```
 
-A API sobe na porta `8080`. Em outro terminal, confira:
+A API sobe na porta `8080`. Em outro terminal:
 
 ```bash
 curl -i http://localhost:8080/api/caminhoes
@@ -124,13 +127,13 @@ A resposta esperada é `401`, porque a rota exige token.
 
 ### 1. Crie o banco de testes
 
-Rode uma vez. O `psql` vai pedir a senha do PostgreSQL definida no dev container:
+Rode uma vez:
 
 ```bash
-psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE frotamais_test;"
+psql -h localhost -p 5432 -U postgres -d postgres -c "CREATE DATABASE frotamais_test_flyway;"
 ```
 
-O schema é criado na primeira execução da suíte.
+O banco começa vazio: as migrations montam o schema na primeira execução da suíte, como no CI.
 
 ### 2. Execute os testes
 
@@ -144,26 +147,25 @@ Para rodar uma classe só:
 ./mvnw test -Dtest=SegurancaCaminhaoTest
 ```
 
-Os testes precisam do PostgreSQL ligado, mas não da API em execução nem de `JWT_SECRET`.
+Os testes precisam do PostgreSQL ligado, mas não da API em execução, de `JWT_SECRET` nem de SMTP (o envio de e-mail é capturado em memória).
 
-### Banco de desenvolvimento e banco de testes
+### Bancos
 
-| | `frotamais` | `frotamais_test` |
+| | `frotamais` | `frotamais_test_flyway` |
 |---|---|---|
 | **Uso** | Desenvolvimento, com a API em execução | Somente testes automatizados |
-| **Criação** | Automática, pelo dev container | Manual, uma vez |
 | **Dados** | Permanecem | Os testes desfazem o que gravam, com rollback |
 
-A suíte nunca deve usar `frotamais`, e não há fallback:
+A suíte nunca usa `frotamais`:
 
-- A URL do banco de testes é fixa em `src/test/resources/config/application.properties`, então `DB_URL` não a altera.
-- `GuardaBancoDeTeste` pergunta ao PostgreSQL em qual banco a conexão chegou, antes de o Hibernate agir. Se for outro banco, ou se `frotamais_test` não existir ou estiver indisponível, a execução falha.
-
-Os dois bancos ficam no mesmo servidor e usam o mesmo usuário.
+- A URL do banco de testes é fixa em `src/test/resources/config/application.properties`; `DB_URL` não a altera.
+- `GuardaBancoDeTeste` confere em qual banco a conexão chegou, antes do Flyway e do Hibernate. Se for outro, a execução falha.
 
 ## 📚 Documentação
 
-Regras de negócio, decisões, roadmap e pendências estão em [`docs/CONTEXTO_FROTA_MAIS.md`](docs/CONTEXTO_FROTA_MAIS.md).
+- [`docs/API.md`](docs/API.md): endpoints, permissões e códigos de resposta.
+- [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md): migrations e adoção do Flyway em bancos existentes.
+- [`docs/CONTEXTO_FROTA_MAIS.md`](docs/CONTEXTO_FROTA_MAIS.md): contexto técnico, histórico, roadmap e pendências.
 
 ---
 
