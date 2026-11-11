@@ -2,6 +2,7 @@ package br.com.frotamais.viagem;
 
 import java.time.Instant;
 
+import br.com.frotamais.usuario.Perfil;
 import br.com.frotamais.usuario.Usuario;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -38,6 +39,11 @@ public class AlteracaoViagem {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
+    /** Perfil de quem alterou, no momento da alteração. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Perfil perfil;
+
     @Column(name = "alterada_em", nullable = false)
     private Instant alteradaEm;
 
@@ -60,10 +66,11 @@ public class AlteracaoViagem {
     protected AlteracaoViagem() {
     }
 
-    AlteracaoViagem(Viagem viagem, Usuario usuario, Instant alteradaEm, Entidade entidade, Long registroId,
+    AlteracaoViagem(Viagem viagem, Usuario usuario, Perfil perfil, Instant alteradaEm, Entidade entidade, Long registroId,
             String campo, String valorAnterior, String valorNovo) {
         this.viagem = viagem;
         this.usuario = usuario;
+        this.perfil = perfil;
         this.alteradaEm = alteradaEm;
         this.entidade = entidade;
         this.registroId = registroId;
@@ -75,6 +82,7 @@ public class AlteracaoViagem {
     public Long getId() { return id; }
     public Viagem getViagem() { return viagem; }
     public Usuario getUsuario() { return usuario; }
+    public Perfil getPerfil() { return perfil; }
     public Instant getAlteradaEm() { return alteradaEm; }
     public Entidade getEntidade() { return entidade; }
     public Long getRegistroId() { return registroId; }

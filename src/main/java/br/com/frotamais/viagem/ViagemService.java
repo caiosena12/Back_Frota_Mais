@@ -114,8 +114,9 @@ public class ViagemService {
         viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
         return fotografias.daViagem(id, empresaId).stream()
                 .map(f -> new FotografiaAnteriorResponse(f.getId(), f.getSubstituidaEm(),
-                        f.getSubstituidaPor().getId(), f.getSubstituidaPor().getNome(),
-                        json.readTree(f.getResultado())))
+                        f.getSubstituidaPor().getId(), f.getSubstituidaPor().getNome(), f.getPerfil(),
+                        json.readTree(f.getResultado()),
+                        f.getResultadoNovo() == null ? null : json.readTree(f.getResultadoNovo())))
                 .toList();
     }
 
@@ -442,11 +443,12 @@ public class ViagemService {
      * novo); false na correção de Arla, pedágio ou despesa extra (mantém o
      * preço já congelado e recalcula o restante).
      *
-     * A fotografia anterior, se existir, é arquivada antes (AuditoriaViagem).
+     * A fotografia anterior, se existir, é arquivada junto com a nova (AuditoriaViagem).
      */
     void consolidar(Long empresaId, Viagem v, boolean reavaliarPreco) {
-        // Numa correção, a fotografia que vai ser substituída fica guardada.
-        auditoria.arquivarFotografia(v);
+        // Numa correção, a fotografia que vai ser substituída fica guardada,
+        // na mesma linha da que a substitui (uma só inclusão na auditoria).
+        RentabilidadeResponse anterior = v.resultadoConsolidado();
         viagens.flush();
         LimitesPlausibilidade limites = politica.limites();
         Instant agora = agora();
@@ -454,6 +456,7 @@ public class ViagemService {
             v.consolidarReferencia(rentabilidade.precoAtual(empresaId, v, limites), agora);
         }
         v.consolidarResultado(rentabilidade.recalcular(empresaId, v, limites), agora);
+        auditoria.arquivarFotografia(v, anterior, v.resultadoConsolidado());
     }
 
     /** Instante em microssegundos, a precisão do PostgreSQL: o valor não muda ao recarregar. */

@@ -10,6 +10,7 @@ import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 import br.com.frotamais.seguranca.UsuarioLogado;
+import br.com.frotamais.usuario.Perfil;
 import br.com.frotamais.usuario.UsuarioRepository;
 import br.com.frotamais.viagem.AlteracaoViagem.Entidade;
 import tools.jackson.databind.ObjectMapper;
@@ -21,7 +22,7 @@ import tools.jackson.databind.ObjectMapper;
  * Uso: tirar um retrato dos campos antes da correção (campos(...)), aplicar a
  * correção e chamar registrar(...) com o retrato de depois. Só os campos que
  * mudaram são gravados, um registro por campo. A fotografia financeira
- * substituída é guardada por arquivarFotografia(...), antes de ser regravada.
+ * substituída é guardada por arquivarFotografia(...), junto com a nova.
  *
  * Valores são guardados como texto: datas em ISO (2025-06-01), números sem
  * notação científica (BigDecimal.toPlainString), ausência como nulo.
@@ -51,19 +52,29 @@ public class AuditoriaViagem {
         for (Map.Entry<String, String> campo : depois.entrySet()) {
             String anterior = antes.get(campo.getKey());
             if (!Objects.equals(anterior, campo.getValue())) {
-                alteracoes.save(new AlteracaoViagem(viagem, usuarios.getReferenceById(logado.usuarioId()), agora,
+                alteracoes.save(new AlteracaoViagem(viagem, usuarios.getReferenceById(logado.usuarioId()), perfil(),
+                        agora,
                         entidade, registroId, campo.getKey(), anterior, campo.getValue()));
             }
         }
     }
 
-    /** Guarda a fotografia atual (se houver) antes de uma correção regravá-la. */
-    public void arquivarFotografia(Viagem viagem) {
-        RentabilidadeResponse atual = viagem.resultadoConsolidado();
-        if (atual != null) {
+    /**
+     * Guarda a fotografia substituída por uma correção (se havia uma) e a que
+     * a substituiu, numa só linha. Na primeira consolidação (anterior nula)
+     * não há o que arquivar.
+     */
+    public void arquivarFotografia(Viagem viagem, RentabilidadeResponse anterior, RentabilidadeResponse nova) {
+        if (anterior != null) {
             fotografias.save(new FotografiaAnterior(viagem, agora(),
-                    usuarios.getReferenceById(logado.usuarioId()), json.writeValueAsString(atual)));
+                    usuarios.getReferenceById(logado.usuarioId()), perfil(),
+                    json.writeValueAsString(anterior), nova == null ? null : json.writeValueAsString(nova)));
         }
+    }
+
+    /** Perfil atual de quem está alterando, vindo do banco (authorities), nunca do token. */
+    private Perfil perfil() {
+        return logado.isDono() ? Perfil.DONO : Perfil.MOTORISTA;
     }
 
     static Map<String, String> campos(Viagem v) {

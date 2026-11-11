@@ -111,6 +111,15 @@ class AuditoriaCorrecaoTest extends ApiViagemTeste {
         dinheiro(original.get("lucro").asString(), anterior.get("lucro"));
         assertEquals(original.get("resultadoConsolidadoEm").asString(),
                 anterior.get("resultadoConsolidadoEm").asString());
+        // A mesma linha mostra o resultado que a substituiu e o perfil de quem corrigiu.
+        assertEquals("DONO", anteriores.get(0).get("perfil").asString());
+        JsonNode novo = anteriores.get(0).get("resultadoNovo");
+        dinheiro("1200.00", novo.get("receita"));
+        assertEquals(buscarViagem(dono, viagem).get("rentabilidade"), novo);
+        for (JsonNode a : alteracoes()) {
+            assertEquals("DONO", a.get("perfil").asString());
+            assertEquals(donoId, a.get("usuarioId").asLong());
+        }
     }
 
     @Test
@@ -143,6 +152,11 @@ class AuditoriaCorrecaoTest extends ApiViagemTeste {
         assertEquals(3, anteriores.size());
         dinheiro("10.00", anteriores.get(0).get("resultado").get("pedagios"));
         dinheiro("12.50", anteriores.get(1).get("resultado").get("pedagios"));
+        // Encadeamento: o resultado novo de cada correção é o anterior da seguinte,
+        // e o da última é a fotografia atual.
+        assertEquals(anteriores.get(0).get("resultadoNovo"), anteriores.get(1).get("resultado"));
+        assertEquals(anteriores.get(1).get("resultadoNovo"), anteriores.get(2).get("resultado"));
+        assertEquals(buscarViagem(dono, viagem).get("rentabilidade"), anteriores.get(2).get("resultadoNovo"));
     }
 
     @Test
