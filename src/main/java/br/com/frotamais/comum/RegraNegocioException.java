@@ -5,10 +5,8 @@ import org.springframework.http.HttpStatus;
 /**
  * Erro de regra de negócio com mensagem destinada ao cliente.
  *
- * Diferente de ResponseStatusException, que passa pelo /error do Spring e
- * perde a mensagem (include-message=never), esta exceção é tratada pelo
- * ApiExceptionHandler e devolve o motivo no corpo, no mesmo formato da
- * validação: {"status", "erro", "detalhes"}.
+ * Tratada pelo ApiExceptionHandler, que devolve o motivo no corpo no formato
+ * único de erro: {"status", "erro", "detalhes"} (ver RespostaErro).
  */
 public class RegraNegocioException extends RuntimeException {
 
@@ -25,6 +23,18 @@ public class RegraNegocioException extends RuntimeException {
 
     public static RegraNegocioException conflito(String mensagem) {
         return new RegraNegocioException(HttpStatus.CONFLICT, mensagem);
+    }
+
+    public static RegraNegocioException naoAutenticado(String mensagem) {
+        return new RegraNegocioException(HttpStatus.UNAUTHORIZED, mensagem);
+    }
+
+    public static RegraNegocioException proibido(String mensagem) {
+        return new RegraNegocioException(HttpStatus.FORBIDDEN, mensagem);
+    }
+
+    public static RegraNegocioException indisponivel(String mensagem) {
+        return new RegraNegocioException(HttpStatus.SERVICE_UNAVAILABLE, mensagem);
     }
 
     public static RegraNegocioException naoEncontrado(String mensagem) {

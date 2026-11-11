@@ -19,16 +19,18 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * Fretes. Acesso restrito ao DONO.
+ * Fretes.
  *
- * O MOTORISTA só pode ver e lançar dados dos caminhões vinculados a ele, e
- * esse vínculo ainda não existe (Anexo A, P12). Até existir, liberar o
- * MOTORISTA daria a ele acesso a todos os caminhões da empresa; por isso o
- * acesso fica negado (403).
+ * DONO: tudo. MOTORISTA: só viagens de caminhões vinculados a ele (as demais
+ * respondem 404); abre, altera enquanto em andamento, lança e finaliza; não
+ * vê custos, lucro, margem nem indicadores; não cadastra viagem histórica
+ * nem cancela viagem.
+ * Essas regras de dados ficam nos serviços (ViagemService, AcessoCaminhao);
+ * aqui só a separação por perfil.
  */
 @RestController
 @RequestMapping("/api/viagens")
-@PreAuthorize("hasRole('DONO')")
+@PreAuthorize("hasAnyRole('DONO', 'MOTORISTA')")
 public class ViagemController {
 
     private final ViagemService service;
@@ -47,6 +49,7 @@ public class ViagemController {
     }
 
     @GetMapping("/indicadores")
+    @PreAuthorize("hasRole('DONO')")
     public IndicadoresResponse indicadores(
             @RequestParam(required = false) Integer ano,
             @RequestParam(required = false) Integer mes,
@@ -55,6 +58,18 @@ public class ViagemController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
             @RequestParam(required = false) Long caminhaoId) {
         return indicadores.indicadores(ano, mes, semana, de, ate, caminhaoId);
+    }
+
+    /** Indicadores de cada caminhão com frete finalizado ou manutenção no período. Só DONO. */
+    @GetMapping("/indicadores/por-caminhao")
+    @PreAuthorize("hasRole('DONO')")
+    public List<IndicadoresCaminhaoResponse> indicadoresPorCaminhao(
+            @RequestParam(required = false) Integer ano,
+            @RequestParam(required = false) Integer mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate semana,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate) {
+        return indicadores.porCaminhao(ano, mes, semana, de, ate);
     }
 
     @GetMapping("/{id}")
@@ -68,8 +83,9 @@ public class ViagemController {
         return service.criar(request);
     }
 
-    /** Frete esquecido, cadastrado já finalizado, com seus lançamentos. Só DONO (regra da classe). */
+    /** Frete esquecido, cadastrado já finalizado, com seus lançamentos. Só DONO. */
     @PostMapping("/historicas")
+    @PreAuthorize("hasRole('DONO')")
     @ResponseStatus(HttpStatus.CREATED)
     public ViagemResponse criarHistorica(@Valid @RequestBody ViagemHistoricaRequest request) {
         return service.criarHistorica(request);
@@ -83,5 +99,26 @@ public class ViagemController {
     @PostMapping("/{id}/finalizar")
     public ViagemResponse finalizar(@PathVariable Long id, @Valid @RequestBody FinalizacaoRequest request) {
         return service.finalizar(id, request);
+    }
+
+    /** Trilha de auditoria: campos corrigidos depois do encerramento. Só DONO. */
+    @GetMapping("/{id}/alteracoes")
+    @PreAuthorize("hasRole('DONO')")
+    public List<AlteracaoViagemResponse> alteracoes(@PathVariable Long id) {
+        return service.alteracoes(id);
+    }
+
+    /** Versões anteriores da fotografia financeira, substituídas por correções. Só DONO. */
+    @GetMapping("/{id}/fotografias-anteriores")
+    @PreAuthorize("hasRole('DONO')")
+    public List<FotografiaAnteriorResponse> fotografiasAnteriores(@PathVariable Long id) {
+        return service.fotografiasAnteriores(id);
+    }
+
+    /** Cancela uma viagem em andamento, com motivo obrigatório. Só DONO. */
+    @PostMapping("/{id}/cancelar")
+    @PreAuthorize("hasRole('DONO')")
+    public ViagemResponse cancelar(@PathVariable Long id, @Valid @RequestBody CancelamentoRequest request) {
+        return service.cancelar(id, request);
     }
 }

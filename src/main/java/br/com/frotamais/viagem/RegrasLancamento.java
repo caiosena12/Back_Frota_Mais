@@ -3,8 +3,10 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 import br.com.frotamais.caminhao.Caminhao;
+import br.com.frotamais.comum.Datas;
 import br.com.frotamais.comum.RegraNegocioException;
 
 /**
@@ -29,6 +31,33 @@ final class RegrasLancamento {
         if (fim != null && data.isAfter(fim)) {
             throw RegraNegocioException.invalido(
                     "A data do lançamento não pode ser posterior ao fim da viagem.");
+        }
+    }
+
+    /**
+     * Abastecimento (diesel ou Arla): dentro do período da viagem, como os
+     * demais lançamentos; ou ANTES do início dela, quando foi feito entre duas
+     * viagens: a partir do dia em que a viagem anterior do caminhão terminou
+     * (fimAnterior, inclusive) e antes do início desta. A data real é
+     * preservada e o abastecimento compõe o diesel desta viagem, não o da
+     * anterior.
+     *
+     * fimAnterior nulo: não há viagem anterior (primeiro frete registrado do
+     * caminhão). Abastecimentos anteriores ao início são aceitos sem limite de
+     * dias: todo abastecimento feito fora de uma viagem pertence à seguinte.
+     */
+    static void validarDataAbastecimento(LocalDate inicio, LocalDate fim, LocalDate fimAnterior,
+            LocalDate data, LocalTime hora) {
+        if (hora != null && data.equals(ViagemService.hoje()) && hora.isAfter(LocalTime.now(Datas.FUSO))) {
+            throw RegraNegocioException.invalido("O horário do abastecimento não pode estar no futuro.");
+        }
+        if (!data.isBefore(inicio)) {
+            validarData(inicio, fim, data);
+            return;
+        }
+        if (fimAnterior != null && data.isBefore(fimAnterior)) {
+            throw RegraNegocioException.invalido("Abastecimento anterior ao início da viagem precisa ter"
+                    + " ocorrido a partir do fim da viagem anterior do caminhão (" + fimAnterior + ").");
         }
     }
 

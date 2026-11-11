@@ -1,6 +1,6 @@
 # Contexto técnico e regras de negócio do Frota+
 
-**Última revisão:** 08/11/2026, branch `feat/viagens` (módulo de viagens e correções pós-auditoria). Revisão anterior: 02/11/2026, commit `bfd02ea`.
+**Última revisão:** 11/11/2026, branch `feat/evolucao-mvp-frota-mais` (seção 0.4). Revisões anteriores: 08/11/2026, branch `feat/viagens`; 02/11/2026, commit `bfd02ea`.
 **Repositório do back-end:** `https://github.com/caiosena12/Back_Frota_Mais` (no Codespaces: `/workspaces/Back_Frota_Mais`).
 
 ---
@@ -28,6 +28,30 @@
 ### 0.3 Limites da verificação
 
 Build completo e testes **não foram executados** nesta revisão. Os testes foram executados depois, em 02/11/2026, no banco exclusivo `frotamais_test` (seção 6.3). O `pom.xml` foi verificado com `mvn validate`, sobre cópias, fora do repositório. Resultados de testes citados vêm de relatos do responsável pelo produto.
+
+### 0.4 Atualização de 11/11/2026 [IMPLEMENTADO]
+
+Branch `feat/evolucao-mvp-frota-mais`, ainda não integrada à `main`. **O que está abaixo prevalece sobre trechos antigos deste documento que digam o contrário.** Algumas regras antigas das seções 2 e 3 foram substituídas por decisões mais recentes do proprietário, registradas fora deste repositório. Na dúvida, o código e os testes descrevem o comportamento atual.
+
+- **Schema versionado pelo Flyway** (`src/main/resources/db/migration`, V1 a V11) com `ddl-auto=validate`. Os testes usam o banco `frotamais_test_flyway`, montado só pelas migrations; o antigo `frotamais_test` não é mais usado. Adoção no banco de desenvolvimento: `docs/MIGRATIONS.md` (ainda **não executada** em `frotamais`).
+- **CI** no GitHub Actions (`.github/workflows/ci.yml`): migrations, suíte completa e build num PostgreSQL descartável.
+- **Erros padronizados** `{"status","erro","detalhes"}` em todas as respostas, inclusive `401` e `403` (`comum/ApiExceptionHandler`, `comum/RespostasSeguranca`). Não há mais `ResponseStatusException` no código.
+- **Caminhões:** marca e eixos (obrigatórios em cadastros e alterações; caminhões antigos ficam nulos até serem editados), situação `ATIVO`, `INATIVO` ou `EXCLUIDO`. O `DELETE` é **exclusão lógica**: recusado com viagem em andamento; o histórico fica intacto. A placa é normalizada (maiúsculas, sem separadores) e única entre os caminhões não excluídos da empresa.
+- **Motoristas** (`/api/motoristas`, só DONO): o DONO cadastra nome, e-mail e caminhões; o sistema envia um **convite por e-mail** (token aleatório de uso único, guardado só como hash, validade de 24 h, configurável); o reenvio invalida o convite anterior e o DONO pode **cancelar o convite pendente** (`DELETE /api/motoristas/{id}/convite`); o motorista cria a própria senha em `POST /api/convites/ativacao`. Do motorista, só nome e e-mail. Sem SMTP configurado, as operações que enviam e-mail respondem `503` e não gravam nada. Troca de senha: `POST /api/auth/senha`.
+- **MOTORISTA nas viagens:** vê e opera só as viagens dos caminhões vinculados a ele (as demais respondem `404`); abre viagem em seu nome, lança e finaliza; não vê custo, lucro, margem nem indicadores; não altera viagem encerrada; não cadastra viagem histórica nem cancela. A regra provisória de `403` em todas as rotas deixou de existir.
+- **Motorista responsável** pela viagem (`motoristaId`): MOTORISTA ou o próprio DONO; opcional em viagens históricas.
+- **Viagem histórica** em caminhão `INATIVO` (terminou antes da inativação) ou `EXCLUIDO` (terminou antes da exclusão, ou da inativação se ele já estava inativo antes). O caminhão excluído continua excluído.
+- **Cancelamento** (`POST /api/viagens/{id}/cancelar`, só DONO, motivo obrigatório, só de viagem em andamento): status `CANCELADA`, nada é apagado, período fechado, resultado consolidado. A `dataFim` da cancelada é a **data do cancelamento** e define o mês em que os valores entram no financeiro. Valor recebido vai no campo do frete; despesas, nos lançamentos normais; não há módulo de compensação. Depois do cancelamento, só o DONO inclui ou corrige lançamentos (com auditoria e nova fotografia); o MOTORISTA recebe `403`; exclusão de lançamento continua `409`. Nos indicadores, as canceladas ficam num **bloco separado** (`viagensCanceladas`, `receitaCanceladas`, `custoCanceladas`, `resultadoCanceladas`, `canceladasComCustoIncompleto`) e entram em `resultadoFinanceiroPeriodo` (= lucro dos concluídos + resultado das canceladas − manutenções), mas nunca nos indicadores de desempenho dos fretes concluídos.
+- **Auditoria das correções:** correções do DONO em viagem encerrada (da viagem ou de um lançamento) e inclusões em viagem cancelada ficam registradas campo a campo, com usuário, **perfil** no momento da alteração, data e hora, valor anterior e novo; cada fotografia financeira substituída é preservada junto com a que a substituiu (`resultado` e `resultadoNovo`, V11). Consultas: `GET /api/viagens/{id}/alteracoes` e `/fotografias-anteriores` (só DONO). As tabelas só recebem inclusões.
+- **Abastecimento entre viagens:** um abastecimento pode ter data anterior ao início da viagem, a partir do dia em que a viagem anterior do caminhão terminou; pertence à viagem seguinte, com data e **hora** (opcional) reais. No primeiro frete do caminhão, qualquer data anterior ao início é aceita, sem limite de dias. A abertura (`POST /api/viagens`) aceita a lista opcional `abastecimentos`, gravada na mesma transação da viagem; o `POST .../abastecimentos` continua disponível. Não há abastecimento avulso fora de viagem.
+- **Manutenções** (`/api/manutencoes`, só DONO): por caminhão, data, descrição livre e valor; exclusão lógica; entram nos indicadores do período pela data e não alteram fretes.
+- **Indicadores:** custo e lucro por km, percentual de km vazio, consumo médio, diesel pago × estimado, manutenções e resultado após manutenções, bloco das canceladas e resultado financeiro do período; `GET /api/viagens/indicadores/por-caminhao` (inclui caminhões que só tiveram cancelada ou manutenção).
+- **Configuração:** a base não tem credenciais padrão; o perfil `dev` (ativado pelo `run-dev-frotamais.sh`) traz os valores locais. `open-in-view` desligado.
+- **E-mail:** o e-mail continua **único em todo o sistema** (restrição no banco). A regra antiga de permitir o mesmo e-mail em empresas diferentes (seções 2.6 e 4.5) não vale mais.
+
+- **Verificação:** `./mvnw clean verify` em 11/11/2026, no Codespaces: 218 testes, 0 falhas, contra `frotamais_test_flyway` montado pelas migrations V1 a V11. A V11 também foi aplicada pelo Flyway numa cópia descartável de banco legado (`docs/MIGRATIONS.md`).
+
+Endpoints e códigos de resposta: `docs/API.md`.
 
 ---
 
@@ -214,14 +238,12 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 - **[CONFIRMADO]** **O motorista só visualiza os caminhões vinculados a ele.** Não visualiza caminhões de outros motoristas, mesmo da mesma empresa. A associação deve ser respeitada nas consultas e nas operações da API.
 - **[CONFIRMADO]** O motorista pode lançar os dados das viagens.
 
-**Lacuna no código:** não existe associação entre motorista e caminhão, nem forma de criar MOTORISTA. Hoje, qualquer usuário autenticado lê todos os caminhões da empresa (seção 4.6).
+**[ATUALIZADO 11/11/2026]** O vínculo motorista–caminhão e o cadastro de motoristas existem (seção 0.4). O fluxo antigo descrito acima ("login gerado pela tela de Caminhões", senha definida ou redefinida pelo dono) foi substituído pelo convite por e-mail.
 
 **Proteção do histórico [CONFIRMADO][IMPLEMENTADO 08/11/2026]:**
 - Caminhão com viagem em andamento não pode ser inativado (`409`).
-- Caminhão com **qualquer** viagem não pode ser excluído (`409`): deve ser inativado. Não há exclusão em cascata.
-- Se uma viagem surgir entre a checagem e a exclusão, a chave estrangeira do banco recusa, e a resposta também é `409`.
+- **[ATUALIZADO 11/11/2026]** O `DELETE` é **exclusão lógica** (status `EXCLUIDO`), recusada só com viagem em andamento (`409`). Nada é apagado; o caminhão excluído sai da lista operacional e não entra em novas viagens.
 - Inativação e exclusão usam o mesmo bloqueio do caminhão da abertura de viagem.
-- `DELETE` de caminhão **sem** viagens continua apagando a linha (P8).
 
 **Permissões [CONFIRMADO]**
 
@@ -235,7 +257,7 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 | Editar lançamentos | todos, sempre | os próprios, com a viagem em andamento |
 | Criar, alterar e excluir caminhões | sim | **não** |
 
-**[IMPLEMENTADO, provisório]** Todas as rotas de viagens exigem **DONO**; o MOTORISTA recebe `403`. Sem o vínculo motorista–caminhão (P12), liberar o MOTORISTA daria a ele acesso a todos os caminhões da empresa, contrariando a regra acima. A tabela de permissões continua sendo o alvo; a liberação depende da etapa 8 do roadmap.
+**[ATUALIZADO 11/11/2026]** A regra provisória (MOTORISTA com `403` em todas as rotas de viagens) foi substituída pelo acesso por vínculo descrito na seção 0.4. Depois de encerrada a viagem, só o DONO a corrige.
 
 **[PROPOSTO]** Dono como opção de "motorista" nas viagens. **Menu:** dono: Dashboard, Caminhões, Viagens, Manutenções e Relatórios; motorista: Viagens. Um menu de Abastecimentos depende do Anexo A, P2.
 
@@ -369,7 +391,7 @@ Back_Frota_Mais/
 
 - PostgreSQL 16 roda como serviço `db` do Docker Compose do dev container, com dados no volume `postgres-data`. Responde em `localhost:5432` dentro do Codespace. **[IMPLEMENTADO]**
 - Banco `frotamais`, usuário `postgres`. Os valores de senha **não** são reproduzidos aqui. `DB_URL`, `DB_USER` e `DB_PASSWORD` só têm valores padrão no `application.properties`.
-- `ddl-auto=update` e `show-sql=true` estão ativos, **sem migrations**. **[PROPOSTO]** Flyway com `ddl-auto=validate`.
+- **[ATUALIZADO 11/11/2026]** Flyway com `ddl-auto=validate`; `show-sql` desligado por padrão (`JPA_SHOW_SQL`). Tabelas novas: `motorista_caminhoes`, `convites`, `viagem_alteracoes`, `viagem_fotografias_anteriores`, `manutencoes` (lista completa em `docs/MIGRATIONS.md`).
 - Ao consultar `usuarios`, **não selecionar `senha_hash`**.
 
 **Modelo de dados:**
@@ -384,7 +406,7 @@ Back_Frota_Mais/
 | `abastecimentos` | id, viagem_id, tipo (DIESEL/ARLA), data, litros, valor_total, criado_por_id, criado_em | [IMPLEMENTADO]; empresa pela viagem |
 | `despesas_viagem` | id, viagem_id, tipo (PEDAGIO/EXTRA), descricao, data, valor, criado_por_id, criado_em | [IMPLEMENTADO]; empresa pela viagem |
 | `trechos` | — | **Descartado** em 08/11/2026 (cada frete é uma viagem) |
-| `manutencoes` | empresa_id, caminhão, data, descrição, valor | [PROPOSTO] |
+| `manutencoes` | empresa_id, caminhão, data, descrição, valor, exclusão lógica | [IMPLEMENTADO 11/11/2026] |
 | (todas) | Isolamento por empresa em todas as consultas e operações, com vínculo direto à empresa ou por relacionamento com outra entidade que tenha esse vínculo. Os campos listados acima não tornam `empresa_id` obrigatório em toda entidade | [CONFIRMADO] |
 
 ### 4.4 Autenticação [IMPLEMENTADO]
@@ -401,7 +423,9 @@ Back_Frota_Mais/
 - Rotas públicas: `POST /api/auth/registro`, `POST /api/auth/login` e `/error`. O resto exige token. Sessão stateless. CSRF desativado porque a API usa Bearer no header.
 - `@EnableMethodSecurity` ativo; `UsuarioLogado` expõe `usuarioId()` e `empresaId()`, lidos do JWT.
 
-### 4.5 Mesmo e-mail em empresas diferentes: lacuna
+### 4.5 Mesmo e-mail em empresas diferentes: lacuna [SUPERADA 11/11/2026]
+
+**O e-mail é único em todo o sistema, por decisão mais recente do proprietário (seção 0.4).** O texto abaixo é histórico.
 
 **[CONFIRMADO]** como regra e **não suportado** pelo código:
 
@@ -465,7 +489,7 @@ Pacote `br.com.frotamais.viagem`, no padrão Controller → Service → Reposito
 | `IndicadorService` | Totais por período. |
 | `RegraNegocioException` (`comum/`) | Erro de negócio com mensagem; tratado pelo `ApiExceptionHandler` no formato `{"status", "erro", "detalhes": [...]}`. |
 
-**Endpoints** (todos exigem token de um DONO; MOTORISTA → `403`; sem token → `401`; viagem, caminhão ou lançamento de outra empresa ou inexistente → `404`)
+**Endpoints** (texto de 08/11/2026; para as permissões atuais do MOTORISTA, ver seção 0.4 e `docs/API.md`. Sem token → `401`; viagem, caminhão ou lançamento de outra empresa ou inexistente → `404`)
 
 | Método e rota | Corpo | Resposta |
 |---|---|---|
@@ -813,7 +837,11 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 12. **Dashboard.**
 13. **Relatórios**, por último.
 
-**Antes de disponibilizar a API publicamente:** rate limit em registro e login, HTTPS, backup, perfis de produção sem credenciais padrão e avaliação de LGPD, já que o sistema guardará dados pessoais e financeiros de terceiros.
+**Atualização de 11/11/2026:** as etapas 4 (migrations e CI), 5 (erros), 8 (vínculo motorista–caminhão) e 10 (manutenções) foram feitas na branch `feat/evolucao-mvp-frota-mais`, além do cancelamento, da auditoria de correções, do abastecimento entre viagens e de novos indicadores (seção 0.4). A etapa 7 deixou de existir: o e-mail é único em todo o sistema. A etapa 11 ganhou custo e lucro por km e consumo médio.
+
+**Lacunas técnicas conhecidas em 11/11/2026:** sem rate limit em login, registro e ativação; CORS não configurado (depende do Angular, P13); `frotamais` do Codespaces ainda sem Flyway (`docs/MIGRATIONS.md`, exige autorização).
+
+**Antes de disponibilizar a API publicamente:** rate limit em registro, login e ativação de convite, HTTPS, backup e avaliação de LGPD, já que o sistema guardará dados pessoais e financeiros de terceiros. Perfis sem credenciais padrão: feito em 11/11/2026.
 
 ---
 
@@ -849,7 +877,11 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 - ~~P18.~~ Padrões dos limites mantidos; Arla sem limite de preço ou consumo; fotografia financeira guarda a política usada, e mudar limites não altera fretes finalizados.
 - ~~P19.~~ Custos do vazio pertencem ao próximo frete; o próximo frete pode começar no dia da descarga; nada é transferido automaticamente.
 
-**Ainda abertas**
+**Atualização de 11/11/2026:** P8 (exclusão lógica do caminhão; status `CANCELADA`), P9 (convite por e-mail; o dono pode ser o motorista responsável), P11 (e-mail único em todo o sistema), P12 (tabela `motorista_caminhoes`) e o item de viagem histórica em caminhão `INATIVO` da P20 (aceita quando terminou antes da inativação) foram decididos ou implementados (seção 0.4). P2 foi parcialmente resolvida pelo abastecimento entre viagens. Continuavam abertas, além das abaixo: viagem histórica em caminhão `EXCLUIDO`, data de referência das canceladas no resultado mensal, abastecimento anterior ao primeiro frete do caminhão, prazo, reenvio e cancelamento de convites, e campos adicionais do motorista.
+
+**Atualização de 11/11/2026 (2):** essas cinco foram decididas pelo proprietário e implementadas (seção 0.4): viagem histórica em `EXCLUIDO` antes da exclusão; canceladas pela data do cancelamento; abastecimentos anteriores ao primeiro frete aceitos sem limite de dias, também na abertura; convite de 24 h, com reenvio que invalida o anterior e cancelamento pelo DONO; motorista só com nome e e-mail. P2 fica resolvida: abastecimento fora de viagem pertence sempre ao frete seguinte, sem menu ou módulo avulso. P20: valor do frete exigido só na finalização (como já era); viagem histórica em `INATIVO` aceita quando terminou antes da inativação; sem capacidade de tanque de Arla. Abertas de fato: P7 (critério do período, hoje a data final, para concluídos já confirmado), P10, P13 e P14.
+
+**Ainda abertas (texto de 08/11/2026)**
 
 - **P2. Abastecimento fora de viagem:** é permitido? Onde é lançado? Existirá menu "Abastecimentos"? Hoje todo abastecimento pertence a uma viagem.
 - **P7.** Semana definida (segunda a domingo, P15). Falta confirmar o critério de período: hoje o frete entra no período pela **data final** (descarga).
@@ -873,12 +905,12 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 ## Anexo B. Ambiente e comandos (sem credenciais)
 
 - **Caminho:** `/workspaces/Back_Frota_Mais` (Codespaces).
-- **Variáveis:** `JWT_SECRET` (Base64, ≥32 bytes) e `JWT_HORAS` ficam em `.frotamais-jwt.env`, fora do Git. `DB_URL`, `DB_USER` e `DB_PASSWORD` só para sobrescrever os padrões.
+- **Variáveis:** `JWT_SECRET` (Base64, ≥32 bytes) e `JWT_HORAS` ficam em `.frotamais-jwt.env`, fora do Git. `DB_URL`, `DB_USER` e `DB_PASSWORD` são obrigatórias fora do perfil `dev`; no `dev` só sobrescrevem os padrões locais. E-mail: `EMAIL_REMETENTE`, `CONVITE_URL_ATIVACAO`, `CONVITE_VALIDADE_HORAS` e as variáveis `SPRING_MAIL_*` (README).
 - **Rodar a API:** `./run-dev-frotamais.sh`, em um terminal dedicado.
 - **Testar sem token:** `curl -i http://localhost:8080/api/caminhoes` deve dar `401`.
-- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test`. Os testes usam só `frotamais_test` e falham se ele não existir (seção 6.3).
+- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test`. Os testes usam só `frotamais_test_flyway` (criado vazio; as migrations montam o schema) e falham se ele não existir.
 - **Banco:** `psql -h localhost -p 5432 -U postgres -d frotamais`; `\dt`, `\conninfo`; `pg_isready -h localhost -p 5432`.
 - **Portas:** 8080 (API), 4200 (Angular), 5432 (PostgreSQL). **Deixar a 5432 privada.** A 8080 só fica pública temporariamente, para testes externos.
 - **Postman:** usar a URL encaminhada da porta 8080; rotas protegidas com *Bearer Token*; corpo `raw` → `JSON`.
-- **Exemplo de caminhão:** `{"placa":"ABC1D23","modelo":"Volvo FH","ano":2024,"status":"ATIVO","capacidadeTanqueLitros":300}`. Placa duplicada na mesma empresa: `409`; id de outra empresa ou inexistente: `404`; validação: `400`; MOTORISTA em escrita: `403`.
+- **Exemplo de caminhão:** `{"placa":"ABC1D23","marca":"Volvo","modelo":"FH","ano":2024,"eixos":6,"status":"ATIVO","capacidadeTanqueLitros":300}`. Placa duplicada na mesma empresa: `409`; id de outra empresa ou inexistente: `404`; validação: `400`; MOTORISTA em escrita: `403`.
 - **Nunca** colar tokens ou capturas com JWT visível.

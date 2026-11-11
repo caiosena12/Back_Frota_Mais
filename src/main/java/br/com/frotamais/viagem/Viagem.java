@@ -86,6 +86,11 @@ public class Viagem {
     @JoinColumn(name = "criado_por_id", nullable = false)
     private Usuario criadoPor;
 
+    /** Quem dirigiu (MOTORISTA ou o próprio DONO). Diferente de criadoPor, quem registrou. Opcional. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "motorista_id")
+    private Usuario motorista;
+
     @Column(name = "criada_em", nullable = false)
     private Instant criadaEm = Instant.now();
 
@@ -103,7 +108,18 @@ public class Viagem {
     @Column(name = "cadastro_retroativo_em")
     private Instant cadastroRetroativoEm;
 
-    /** Fotografia financeira do frete finalizado. Nula enquanto em andamento. */
+    /** Cancelamento (só DONO): quando, por quem e por quê. A viagem e os lançamentos são preservados. */
+    @Column(name = "cancelada_em")
+    private Instant canceladaEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelada_por_id")
+    private Usuario canceladaPor;
+
+    @Column(name = "motivo_cancelamento", length = 1000)
+    private String motivoCancelamento;
+
+    /** Fotografia financeira do frete encerrado (finalizado ou cancelado). Nula enquanto em andamento. */
     @Embedded
     private ResultadoConsolidado resultado;
 
@@ -168,6 +184,22 @@ public class Viagem {
         return status == StatusViagem.FINALIZADA;
     }
 
+    public boolean isCancelada() {
+        return status == StatusViagem.CANCELADA;
+    }
+
+    /** Finalizada ou cancelada: período fechado, sem lançamento novo, só correções do DONO. */
+    public boolean isEncerrada() {
+        return status != StatusViagem.EM_ANDAMENTO;
+    }
+
+    public void cancelar(Usuario por, String motivo, Instant em) {
+        this.status = StatusViagem.CANCELADA;
+        this.canceladaPor = por;
+        this.motivoCancelamento = motivo;
+        this.canceladaEm = em;
+    }
+
     public void marcarAlteracao() {
         this.atualizadaEm = Instant.now();
     }
@@ -200,11 +232,16 @@ public class Viagem {
     public BigDecimal getConsumoMedioCarregado() { return consumoMedioCarregado; }
     public void setConsumoMedioCarregado(BigDecimal consumoMedioCarregado) { this.consumoMedioCarregado = consumoMedioCarregado; }
     public Usuario getCriadoPor() { return criadoPor; }
+    public Usuario getMotorista() { return motorista; }
+    public void setMotorista(Usuario motorista) { this.motorista = motorista; }
     public void setCriadoPor(Usuario criadoPor) { this.criadoPor = criadoPor; }
     public Instant getCriadaEm() { return criadaEm; }
     public Instant getAtualizadaEm() { return atualizadaEm; }
     public Instant getFinalizadaEm() { return finalizadaEm; }
     public void setFinalizadaEm(Instant finalizadaEm) { this.finalizadaEm = finalizadaEm; }
     public Instant getCadastroRetroativoEm() { return cadastroRetroativoEm; }
+    public Instant getCanceladaEm() { return canceladaEm; }
+    public Usuario getCanceladaPor() { return canceladaPor; }
+    public String getMotivoCancelamento() { return motivoCancelamento; }
     public void setCadastroRetroativoEm(Instant cadastroRetroativoEm) { this.cadastroRetroativoEm = cadastroRetroativoEm; }
 }

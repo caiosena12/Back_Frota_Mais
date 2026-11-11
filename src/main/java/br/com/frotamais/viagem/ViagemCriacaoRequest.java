@@ -2,7 +2,9 @@ package br.com.frotamais.viagem;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
@@ -21,6 +23,8 @@ import jakarta.validation.constraints.Size;
  */
 public record ViagemCriacaoRequest(
         @NotNull Long caminhaoId,
+        /** Quem vai dirigir. MOTORISTA abrindo: ausente ou ele mesmo. DONO: um motorista vinculado, ele mesmo ou ausente. */
+        Long motoristaId,
         @NotNull LocalDate dataInicio,
         @Size(max = 120) String origem,
         @Size(max = 120) String destino,
@@ -28,5 +32,16 @@ public record ViagemCriacaoRequest(
         @PositiveOrZero @Max(9_999_999) Integer kmInicialVazio,
         @PositiveOrZero @Max(9_999_999) Integer kmInicialCarregado,
         @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioVazio,
-        @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioCarregado) {
+        @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioCarregado,
+        /**
+         * Abastecimentos feitos antes da abertura (desde o fim da viagem anterior
+         * do caminhão; no primeiro frete, sem limite de dias), gravados na mesma
+         * transação da viagem. Opcional. Os feitos depois usam o endpoint de
+         * abastecimentos da viagem.
+         */
+        @Size(max = 200) List<@NotNull @Valid AbastecimentoRequest> abastecimentos) {
+
+    List<AbastecimentoRequest> abastecimentosOuVazio() {
+        return abastecimentos == null ? List.of() : abastecimentos;
+    }
 }

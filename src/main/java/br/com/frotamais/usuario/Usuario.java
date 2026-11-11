@@ -26,7 +26,8 @@ public class Usuario {
     @Column(nullable = false, unique = true, length = 160)
     private String email;
 
-    @Column(name = "senha_hash", nullable = false)
+    /** Nulo enquanto o motorista convidado não define a própria senha. */
+    @Column(name = "senha_hash")
     private String senhaHash;
 
     @Enumerated(EnumType.STRING)
@@ -40,6 +41,11 @@ public class Usuario {
     @JoinColumn(name = "empresa_id")
     private Empresa empresa;
 
+    /** E-mail como é gravado e comparado: sem espaços nas pontas, em minúsculas. Único no sistema. */
+    public static String normalizarEmail(String email) {
+        return email.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
     public Long getId() { return id; }
     public String getNome() { return nome; }
     public void setNome(String nome) { this.nome = nome; }
@@ -50,6 +56,8 @@ public class Usuario {
     public Perfil getPerfil() { return perfil; }
     public void setPerfil(Perfil perfil) { this.perfil = perfil; }
     public boolean isAtivo() { return ativo; }
+    /** Convidado que ainda não aceitou o convite (sem senha, inativo). */
+    public boolean isAtivacaoPendente() { return senhaHash == null; }
     public void setAtivo(boolean ativo) { this.ativo = ativo; }
     public Empresa getEmpresa() { return empresa; }
     public void setEmpresa(Empresa empresa) { this.empresa = empresa; }

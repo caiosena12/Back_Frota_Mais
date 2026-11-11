@@ -1,5 +1,9 @@
 package br.com.frotamais.caminhao;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+
 import br.com.frotamais.empresa.Empresa;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -11,11 +15,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "caminhoes",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"empresa_id", "placa"}))
+/**
+ * Placa única por empresa entre os caminhões não excluídos: índice único
+ * parcial uk_caminhoes_empresa_placa_operacional (migration V3).
+ */
+@Table(name = "caminhoes")
 public class Caminhao {
 
     @Id
@@ -28,6 +34,9 @@ public class Caminhao {
 
     @Column(nullable = false, length = 8)
     private String placa;
+
+    @Column(length = 60)
+    private String marca;
 
     @Column(nullable = false, length = 80)
     private String modelo;
@@ -42,11 +51,41 @@ public class Caminhao {
     @Column(name = "capacidade_tanque_litros")
     private Integer capacidadeTanqueLitros;
 
+    private Integer eixos;
+
+    @Column(name = "inativado_em")
+    private Instant inativadoEm;
+
+    @Column(name = "excluido_em")
+    private Instant excluidoEm;
+
+    /** Data (no fuso do produto) em que o caminhão foi inativado, ou null. */
+    public LocalDate dataInativacao(ZoneId fuso) {
+        return inativadoEm == null ? null : LocalDate.ofInstant(inativadoEm, fuso);
+    }
+
+    public boolean isExcluido() {
+        return status == StatusCaminhao.EXCLUIDO;
+    }
+
     public Long getId() { return id; }
     public Empresa getEmpresa() { return empresa; }
     public void setEmpresa(Empresa empresa) { this.empresa = empresa; }
     public String getPlaca() { return placa; }
     public void setPlaca(String placa) { this.placa = placa; }
+    public String getMarca() { return marca; }
+    public void setMarca(String marca) { this.marca = marca; }
+    public Integer getEixos() { return eixos; }
+    public void setEixos(Integer eixos) { this.eixos = eixos; }
+    /** Data local da exclusão lógica; nula se não excluído. */
+    public LocalDate dataExclusao(ZoneId fuso) {
+        return excluidoEm == null ? null : LocalDate.ofInstant(excluidoEm, fuso);
+    }
+
+    public Instant getInativadoEm() { return inativadoEm; }
+    public void setInativadoEm(Instant inativadoEm) { this.inativadoEm = inativadoEm; }
+    public Instant getExcluidoEm() { return excluidoEm; }
+    public void setExcluidoEm(Instant excluidoEm) { this.excluidoEm = excluidoEm; }
     public String getModelo() { return modelo; }
     public void setModelo(String modelo) { this.modelo = modelo; }
     public Integer getAno() { return ano; }

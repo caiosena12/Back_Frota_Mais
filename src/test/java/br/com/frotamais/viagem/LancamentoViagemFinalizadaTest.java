@@ -24,6 +24,7 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
 
     private Conta conta;
     private String token;
+    private long caminhaoId;
     private long viagem;
     private String url;
     private long dieselId, arlaId, pedagioId, extraId;
@@ -32,7 +33,7 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
     void preparar() throws Exception {
         conta = registrar();
         token = conta.token();
-        long caminhaoId = criarCaminhao(token);
+        caminhaoId = criarCaminhao(token);
         viagem = criarViagem(token, corpo("caminhaoId", caminhaoId, "dataInicio", "2025-03-01",
                 "origem", "A", "destino", "B", "valorFrete", "2000.00", "kmInicialCarregado", 0));
         url = VIAGENS + "/" + viagem;
@@ -104,12 +105,17 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
 
     @Test
     void motoristaNaoCorrigeLancamentoDeViagemFinalizada() throws Exception {
+        // Motorista vinculado ao caminhão: vê a viagem, mas não corrige depois de encerrada.
+        String motorista = criarMotorista(token, caminhaoId).token();
+        chamar(GET(url), motorista, null, 200);
+        chamar(PUT(url + "/pedagios/" + pedagioId), motorista, corpo("data", "2025-03-01", "valor", "1.00"), 403);
+        chamar(PUT(url + "/abastecimentos/" + dieselId), motorista, diesel("2025-03-01", "650.00"), 403);
+
+        // Sem vínculo (o perfil vem do banco): nem enxerga a viagem.
         Usuario usuario = usuarios.findByEmail(conta.email()).orElseThrow();
         usuario.setPerfil(Perfil.MOTORISTA);
         usuarios.saveAndFlush(usuario);
-
-        chamar(PUT(url + "/pedagios/" + pedagioId), token, corpo("data", "2025-03-01", "valor", "1.00"), 403);
-        chamar(PUT(url + "/abastecimentos/" + dieselId), token, diesel("2025-03-01", "650.00"), 403);
+        chamar(PUT(url + "/pedagios/" + pedagioId), token, corpo("data", "2025-03-01", "valor", "1.00"), 404);
     }
 
     @Test

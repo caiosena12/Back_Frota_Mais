@@ -24,13 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Concorrência real: requisições simultâneas, cada uma na sua thread e na sua
- * transação, que de fato gravam (commit) no banco frotamais_test. Por isso
+ * transação, que de fato gravam (commit) no banco frotamais_test_flyway. Por isso
  * esta classe NÃO usa a transação de teste com rollback da classe base.
  *
  * Os dados são isolados (empresa, usuário e caminhão novos, só deste teste)
  * e apagados ao final por id da empresa criada aqui, nunca de forma
  * indiscriminada. GuardaBancoDeTeste continua ativo, e a limpeza confere de
- * novo o nome do banco antes de apagar.
+ * novo o nome do banco antes de apagar. A limpeza cobre todas as tabelas que
+ * os cenários gravam (viagens, lançamentos, auditoria, manutenções e
+ * caminhões), sempre filtradas pela empresa criada aqui.
  */
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ConcorrenciaViagemTest extends ApiViagemTeste {
@@ -57,17 +59,21 @@ class ConcorrenciaViagemTest extends ApiViagemTeste {
         if (empresaId == null) {
             return;
         }
-        assertEquals("frotamais_test", jdbc.queryForObject("select current_database()", String.class));
+        assertEquals("frotamais_test_flyway", jdbc.queryForObject("select current_database()", String.class));
         String daEmpresa = "select id from viagens where empresa_id = ?";
+        jdbc.update("delete from viagem_alteracoes where viagem_id in (" + daEmpresa + ")", empresaId);
+        jdbc.update("delete from viagem_fotografias_anteriores where viagem_id in (" + daEmpresa + ")", empresaId);
         jdbc.update("delete from abastecimentos where viagem_id in (" + daEmpresa + ")", empresaId);
         jdbc.update("delete from despesas_viagem where viagem_id in (" + daEmpresa + ")", empresaId);
         jdbc.update("delete from viagens where empresa_id = ?", empresaId);
+        jdbc.update("delete from manutencoes where empresa_id = ?", empresaId);
         jdbc.update("delete from caminhoes where empresa_id = ?", empresaId);
         jdbc.update("delete from usuarios where empresa_id = ?", empresaId);
         jdbc.update("delete from empresas where id = ?", empresaId);
 
         for (String sql : List.of("select count(*) from viagens where empresa_id = ?",
                 "select count(*) from caminhoes where empresa_id = ?",
+                "select count(*) from manutencoes where empresa_id = ?",
                 "select count(*) from usuarios where empresa_id = ?",
                 "select count(*) from empresas where id = ?")) {
             assertEquals(0, jdbc.queryForObject(sql, Integer.class, empresaId), sql);
@@ -97,8 +103,13 @@ class ConcorrenciaViagemTest extends ApiViagemTeste {
     }
 
     private MockHttpServletRequestBuilder post(String url, Object corpo) throws Exception {
-        return POST(url).header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(corpo));
+        return comToken(POST(url), corpo);
+    }
+
+    private MockHttpServletRequestBuilder comToken(MockHttpServletRequestBuilder req, Object corpo) throws Exception {
+        req.header("Authorization", "Bearer " + token);
+        return corpo == null ? req
+                : req.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(corpo));
     }
 
     /** Pares de viagens do caminhão em conflito pela regra de sobreposição, contados direto no banco. */
@@ -154,5 +165,69 @@ class ConcorrenciaViagemTest extends ApiViagemTeste {
         assertEquals(1, jdbc.queryForObject("select count(*) from despesas_viagem d join viagens v"
                 + " on v.id = d.viagem_id where v.empresa_id = ?", Integer.class, empresaId));
         assertTrue(status.stream().allMatch(s -> s == 201 || s == 409), status::toString);
+    }
+
+    private static final int RODADAS = 5;
+
+    /**
+     * Janela 1 de 84d8e03: abastecimento antecipado da viagem seguinte (antes do
+     * início dela, depois do fim da anterior) ao mesmo tempo que a correção da
+     * data final da anterior para depois dele. Os dois bloqueiam o caminhão
+     * antes da viagem, então um enxerga o outro: só um passa, e nunca fica um
+     * abastecimento da seguinte com data anterior ao fim da anterior.
+     */
+    @Test
+    void abastecimentoAntecipadoECorrecaoDoFimDaAnterior_nuncaPassamOsDois() throws Exception {
+        for (int rodada = 0; rodada < RODADAS; rodada++) {
+            long caminhao = criarCaminhao(token);
+            long anterior = chamar(POST(VIAGENS + "/historicas"), token, corpo("caminhaoId", caminhao,
+                    "dataInicio", "2025-03-01", "dataFim", "2025-03-05", "origem", "A", "destino", "B",
+                    "valorFrete", "1000.00", "kmInicialCarregado", 0, "kmFinalCarregado", 400,
+                    "consumoMedioCarregado", "2.50"), 201).get("id").asLong();
+            long seguinte = criarViagem(token, corpo("caminhaoId", caminhao, "dataInicio", "2025-03-10",
+                    "kmInicialCarregado", 400));
+
+            List<Integer> status = simultaneas(List.of(
+                    post(VIAGENS + "/" + seguinte + "/abastecimentos", corpo("tipo", "DIESEL",
+                            "data", "2025-03-06", "litros", "100", "valorTotal", "600.00")),
+                    comToken(PUT(VIAGENS + "/" + anterior), corpo("dataInicio", "2025-03-01",
+                            "dataFim", "2025-03-08", "origem", "A", "destino", "B", "valorFrete", "1000.00",
+                            "kmInicialCarregado", 0, "kmFinalCarregado", 400, "consumoMedioCarregado", "2.50"))));
+
+            // Ou o abastecimento entra (e a correção é recusada), ou a correção entra
+            // (e o abastecimento fica antes do novo fim da anterior: recusado).
+            boolean abasteceu = status.get(0) == 201;
+            assertEquals(abasteceu ? List.of(201, 409) : List.of(400, 200), status, status::toString);
+            assertEquals(0, jdbc.queryForObject("""
+                    select count(*) from abastecimentos a, viagens ant
+                    where a.viagem_id = ? and ant.id = ? and a.data < ant.data_fim
+                    """, Integer.class, seguinte, anterior));
+        }
+    }
+
+    /**
+     * Janela 2 de 84d8e03: manutenção cadastrada ao mesmo tempo que a exclusão
+     * do caminhão. A manutenção bloqueia o caminhão ao conferir que ele não está
+     * excluído, como a exclusão: ou ela entra antes (e a exclusão vem depois),
+     * ou é recusada. Nunca fica manutenção criada depois da exclusão.
+     */
+    @Test
+    void manutencaoEExclusaoDoCaminhao_manutencaoNuncaEntraDepoisDaExclusao() throws Exception {
+        for (int rodada = 0; rodada < RODADAS; rodada++) {
+            long caminhao = criarCaminhao(token);
+            List<Integer> status = simultaneas(List.of(
+                    post("/api/manutencoes", corpo("caminhaoId", caminhao, "data", "2025-03-01",
+                            "descricao", "Troca de óleo", "valor", "350.00")),
+                    comToken(DELETE("/api/caminhoes/" + caminhao), null)));
+
+            assertEquals(204, status.get(1), status::toString);
+            assertTrue(status.get(0) == 201 || status.get(0) == 409, status::toString);
+            assertEquals(status.get(0) == 201 ? 1 : 0, jdbc.queryForObject(
+                    "select count(*) from manutencoes where caminhao_id = ?", Integer.class, caminhao));
+            assertEquals(0, jdbc.queryForObject("""
+                    select count(*) from manutencoes m join caminhoes c on c.id = m.caminhao_id
+                    where c.id = ? and m.criada_em >= c.excluido_em
+                    """, Integer.class, caminhao));
+        }
     }
 }

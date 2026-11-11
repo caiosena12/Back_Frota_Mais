@@ -59,8 +59,26 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             @Param("fim") LocalDate fim,
             @Param("ignorarId") Long ignorarId);
 
+    /** Viagem do caminhão que começou imediatamente antes de inicio (ignorarId: a própria viagem). */
+    Optional<Viagem> findFirstByEmpresaIdAndCaminhaoIdAndDataInicioBeforeAndIdNotOrderByDataInicioDesc(
+            Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId);
+
+    /** Viagem do caminhão que começou imediatamente depois de inicio (ignorarId: a própria viagem). */
+    Optional<Viagem> findFirstByEmpresaIdAndCaminhaoIdAndDataInicioAfterAndIdNotOrderByDataInicioAsc(
+            Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId);
+
+    default Optional<Viagem> anterior(Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId) {
+        return findFirstByEmpresaIdAndCaminhaoIdAndDataInicioBeforeAndIdNotOrderByDataInicioDesc(
+                empresaId, caminhaoId, inicio, ignorarId != null ? ignorarId : 0L);
+    }
+
+    default Optional<Viagem> seguinte(Long empresaId, Long caminhaoId, LocalDate inicio, Long ignorarId) {
+        return findFirstByEmpresaIdAndCaminhaoIdAndDataInicioAfterAndIdNotOrderByDataInicioAsc(
+                empresaId, caminhaoId, inicio, ignorarId != null ? ignorarId : 0L);
+    }
+
     @Query("""
-            select v from Viagem v join fetch v.caminhao c
+            select v from Viagem v join fetch v.caminhao c left join fetch v.motorista
             where v.empresa.id = :empresaId
               and (:status is null or v.status = :status)
               and (:caminhaoId is null or c.id = :caminhaoId)
@@ -68,6 +86,26 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             """)
     List<Viagem> listar(
             @Param("empresaId") Long empresaId,
+            @Param("status") StatusViagem status,
+            @Param("caminhaoId") Long caminhaoId);
+
+    /**
+     * Viagens dos caminhões vinculados ao motorista (não excluídos). Só as que
+     * ele pode ver: o vínculo é conferido na própria consulta.
+     */
+    @Query("""
+            select v from Viagem v join fetch v.caminhao c left join fetch v.motorista
+            where v.empresa.id = :empresaId
+              and c.status <> br.com.frotamais.caminhao.StatusCaminhao.EXCLUIDO
+              and exists (select 1 from VinculoMotorista vm
+                          where vm.caminhao = c and vm.motorista.id = :motoristaId)
+              and (:status is null or v.status = :status)
+              and (:caminhaoId is null or c.id = :caminhaoId)
+            order by v.dataInicio desc, v.id desc
+            """)
+    List<Viagem> listarDoMotorista(
+            @Param("empresaId") Long empresaId,
+            @Param("motoristaId") Long motoristaId,
             @Param("status") StatusViagem status,
             @Param("caminhaoId") Long caminhaoId);
 
@@ -81,6 +119,26 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             order by v.dataFim, v.id
             """)
     List<Viagem> finalizadasNoPeriodo(
+            @Param("empresaId") Long empresaId,
+            @Param("de") LocalDate de,
+            @Param("ate") LocalDate ate,
+            @Param("caminhaoId") Long caminhaoId);
+
+    /**
+     * Viagens canceladas cuja data do cancelamento está no período. A data do
+     * cancelamento é a data final da viagem cancelada (informada no
+     * cancelamento, padrão: o dia em que foi feito).
+     */
+    @Query("""
+            select v from Viagem v join fetch v.caminhao c
+            where v.empresa.id = :empresaId
+              and v.status = br.com.frotamais.viagem.StatusViagem.CANCELADA
+              and (cast(:de as date) is null or v.dataFim >= :de)
+              and (cast(:ate as date) is null or v.dataFim <= :ate)
+              and (:caminhaoId is null or c.id = :caminhaoId)
+            order by v.dataFim, v.id
+            """)
+    List<Viagem> canceladasNoPeriodo(
             @Param("empresaId") Long empresaId,
             @Param("de") LocalDate de,
             @Param("ate") LocalDate ate,

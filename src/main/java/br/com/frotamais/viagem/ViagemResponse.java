@@ -11,11 +11,15 @@ import java.util.List;
  *
  * cadastroRetroativoEm preenchido: frete cadastrado depois de acontecer
  * (POST /api/viagens/historicas), no instante indicado.
+ *
+ * canceladaEm e motivoCancelamento: preenchidos só em viagem CANCELADA.
  */
 public record ViagemResponse(
         Long id,
         Long caminhaoId,
         String placa,
+        Long motoristaId,
+        String motoristaNome,
         StatusViagem status,
         String origem,
         String destino,
@@ -32,6 +36,8 @@ public record ViagemResponse(
         Instant atualizadaEm,
         Instant finalizadaEm,
         Instant cadastroRetroativoEm,
+        Instant canceladaEm,
+        String motivoCancelamento,
         List<AbastecimentoResponse> abastecimentosDiesel,
         List<AbastecimentoResponse> abastecimentosArla,
         List<PedagioResponse> pedagios,
@@ -44,6 +50,8 @@ public record ViagemResponse(
                 v.getId(),
                 v.getCaminhao().getId(),
                 v.getCaminhao().getPlaca(),
+                v.getMotorista() != null ? v.getMotorista().getId() : null,
+                v.getMotorista() != null ? v.getMotorista().getNome() : null,
                 v.getStatus(),
                 v.getOrigem(),
                 v.getDestino(),
@@ -60,6 +68,8 @@ public record ViagemResponse(
                 v.getAtualizadaEm(),
                 v.getFinalizadaEm(),
                 v.getCadastroRetroativoEm(),
+                v.getCanceladaEm(),
+                v.getMotivoCancelamento(),
                 abastecimentos.stream().filter(a -> a.getTipo() == TipoCombustivel.DIESEL)
                         .map(AbastecimentoResponse::de).toList(),
                 abastecimentos.stream().filter(a -> a.getTipo() == TipoCombustivel.ARLA)

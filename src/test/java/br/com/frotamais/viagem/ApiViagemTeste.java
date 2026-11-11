@@ -1,5 +1,7 @@
 package br.com.frotamais.viagem;
 
+import br.com.frotamais.suporte.CaixaDeSaidaTeste;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,7 +38,7 @@ import tools.jackson.databind.ObjectMapper;
 })
 @AutoConfigureMockMvc
 @Transactional
-abstract class ApiViagemTeste {
+public abstract class ApiViagemTeste {
 
     protected static final String VIAGENS = "/api/viagens";
 
@@ -45,6 +47,22 @@ abstract class ApiViagemTeste {
 
     @Autowired
     protected ObjectMapper objectMapper;
+
+    @Autowired
+    protected CaixaDeSaidaTeste caixaDeSaida;
+
+    /** Motorista real: convidado pelo dono, ativado pelo link do e-mail. */
+    protected record Motorista(long id, String token, String email) {
+    }
+
+    protected Motorista criarMotorista(String tokenDono, Long... caminhoes) throws Exception {
+        String email = "motorista-" + UUID.randomUUID() + "@teste.com";
+        long id = chamar(post("/api/motoristas"), tokenDono, corpo("nome", "Motorista " + email.substring(10, 18),
+                "email", email, "caminhaoIds", java.util.List.of(caminhoes)), 201).get("id").asLong();
+        String token = chamar(post("/api/convites/ativacao"), null,
+                corpo("token", caixaDeSaida.ultimoToken(email), "senha", "Motorista123"), 200).get("token").asString();
+        return new Motorista(id, token, email);
+    }
 
     /** Empresa nova com um DONO; devolve o token e o e-mail. */
     protected record Conta(String token, String email) {
@@ -64,7 +82,7 @@ abstract class ApiViagemTeste {
     protected long criarCaminhao(String token) throws Exception {
         String placa = "V" + UUID.randomUUID().toString().replace("-", "").substring(0, 7).toUpperCase();
         return chamar(post("/api/caminhoes"), token, Map.of(
-                "placa", placa, "modelo", "Caminhao de teste", "ano", 2022,
+                "placa", placa, "marca", "Marca de teste", "modelo", "Caminhao de teste", "ano", 2022, "eixos", 6,
                 "status", "ATIVO", "capacidadeTanqueLitros", 600), 201).get("id").asLong();
     }
 

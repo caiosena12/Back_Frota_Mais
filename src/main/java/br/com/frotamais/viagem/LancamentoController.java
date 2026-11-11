@@ -13,10 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 
-/** Lançamentos do frete (menu "Ações"). Mesmo controle de acesso de ViagemController. */
+/**
+ * Lançamentos do frete (menu "Ações"). DONO e MOTORISTA; o motorista só nas
+ * viagens de caminhões vinculados e, depois de encerrada a viagem, não
+ * corrige nada (LancamentoService).
+ */
 @RestController
 @RequestMapping("/api/viagens/{viagemId}")
-@PreAuthorize("hasRole('DONO')")
+@PreAuthorize("hasAnyRole('DONO', 'MOTORISTA')")
 public class LancamentoController {
 
     private final LancamentoService service;

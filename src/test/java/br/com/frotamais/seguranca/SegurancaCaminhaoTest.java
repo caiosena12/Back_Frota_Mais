@@ -53,8 +53,10 @@ class SegurancaCaminhaoTest {
                 .content("""
                     {
                         "placa": "ABC1234",
+                        "marca": "Volvo",
                         "modelo": "Caminhao de teste",
                         "ano": 2024,
+                        "eixos": 6,
                         "status": "ATIVO",
                         "capacidadeTanqueLitros": 300
                     }

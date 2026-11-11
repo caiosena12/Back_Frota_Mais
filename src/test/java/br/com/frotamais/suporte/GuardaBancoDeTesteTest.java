@@ -29,7 +29,7 @@ class GuardaBancoDeTesteTest {
                 Statement comando = conexao.createStatement();
                 ResultSet resultado = comando.executeQuery("SELECT current_database()")) {
             assertTrue(resultado.next());
-            assertEquals("frotamais_test", resultado.getString(1));
+            assertEquals("frotamais_test_flyway", resultado.getString(1));
         }
     }
 
@@ -39,12 +39,19 @@ class GuardaBancoDeTesteTest {
                 IllegalStateException.class,
                 () -> GuardaBancoDeTeste.exigirBancoDeTeste("frotamais"));
 
-        assertTrue(erro.getMessage().contains("frotamais_test"));
+        assertTrue(erro.getMessage().contains("frotamais_test_flyway"));
     }
 
     @Test
     void guardaAceitaBancoDeTeste() {
         assertDoesNotThrow(
+                () -> GuardaBancoDeTeste.exigirBancoDeTeste("frotamais_test_flyway"));
+    }
+
+    /** O banco antigo, montado pelo ddl-auto do Hibernate, não é mais aceito. */
+    @Test
+    void guardaRecusaBancoDeTesteAntigo() {
+        assertThrows(IllegalStateException.class,
                 () -> GuardaBancoDeTeste.exigirBancoDeTeste("frotamais_test"));
     }
 }

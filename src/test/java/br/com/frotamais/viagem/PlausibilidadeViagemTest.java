@@ -97,7 +97,7 @@ class PlausibilidadeViagemTest extends ApiViagemTeste {
 
         // Caminhão sem capacidade cadastrada: não há limite inventado.
         long semCapacidade = chamar(POST("/api/caminhoes"), token, corpo("placa", "SCP" + (caminhaoId % 10000),
-                "modelo", "x", "ano", 2020), 201).get("id").asLong();
+                "marca", "x", "modelo", "x", "ano", 2020, "eixos", 3), 201).get("id").asLong();
         long outra = criarViagem(token, corpo("caminhaoId", semCapacidade, "dataInicio", "2025-03-01",
                 "kmInicialCarregado", 0));
         abastecer(outra, "DIESEL", "5000", "30000.00", 201);
