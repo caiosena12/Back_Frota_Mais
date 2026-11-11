@@ -257,24 +257,27 @@ public class ViagemService {
             }
             motorista = v.getMotorista();
         } else {
-            motorista = resolverMotorista(empresaId, v.getCaminhao(), req.motoristaId(), !v.isFinalizada());
+            motorista = resolverMotorista(empresaId, v.getCaminhao(), req.motoristaId(), !v.isEncerrada());
         }
 
-        if (!v.isFinalizada() && (req.dataFim() != null || req.kmFinalCarregado() != null)) {
+        if (!v.isEncerrada() && (req.dataFim() != null || req.kmFinalCarregado() != null)) {
             throw RegraNegocioException.invalido(
                     "Data final e quilometragem final são informadas na finalização da viagem.");
         }
 
         Estado estado = new Estado(req.dataInicio(),
-                v.isFinalizada() ? req.dataFim() : null,
+                v.isEncerrada() ? req.dataFim() : null,
                 req.valorFrete(), texto(req.origem()), texto(req.destino()),
                 req.kmInicialVazio(), req.kmInicialCarregado(),
-                v.isFinalizada() ? req.kmFinalCarregado() : null,
+                v.isEncerrada() ? req.kmFinalCarregado() : null,
                 req.consumoMedioVazio(), req.consumoMedioCarregado());
         estado.validarCoerencia(politica.limites());
         if (v.isFinalizada()) {
             // Correção de viagem finalizada: ela precisa continuar completa e coerente.
             estado.validarCompleta();
+        } else if (v.isCancelada() && estado.dataFim() == null) {
+            // Cancelada continua com o período fechado; os demais dados podem ficar incompletos.
+            throw RegraNegocioException.invalido("Viagem cancelada precisa manter a data final.");
         }
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
@@ -282,8 +285,8 @@ public class ViagemService {
         estado.aplicar(v);
         v.setMotorista(motorista);
         v.marcarAlteracao();
-        if (v.isFinalizada()) {
-            // Correção explícita de um frete finalizado: regrava a fotografia só dele,
+        if (v.isEncerrada()) {
+            // Correção explícita de um frete encerrado: regrava a fotografia só dele,
             // com a referência de preço e a política de cálculo atuais.
             consolidar(empresaId, v, true);
         }
@@ -295,6 +298,9 @@ public class ViagemService {
         Viagem v = travarComCaminhao(id, empresaId);
         if (v.isFinalizada()) {
             throw RegraNegocioException.conflito("A viagem já está finalizada.");
+        }
+        if (v.isCancelada()) {
+            throw RegraNegocioException.conflito("Viagem cancelada não pode ser finalizada.");
         }
 
         Estado estado = new Estado(v.getDataInicio(), req.dataFim(), v.getValorFrete(), v.getOrigem(),
@@ -309,6 +315,48 @@ public class ViagemService {
         estado.aplicar(v);
         v.setStatus(StatusViagem.FINALIZADA);
         v.setFinalizadaEm(agora());
+        v.marcarAlteracao();
+        consolidar(empresaId, v, true);
+        return detalhar(empresaId, v);
+    }
+
+    /**
+     * Cancela uma viagem em andamento (só DONO; o controller exige o perfil).
+     * Nada é apagado: a viagem fica CANCELADA com motivo, autor e momento, os
+     * lançamentos continuam, e o período é fechado na data final informada
+     * (padrão: hoje) para liberar o caminhão. O resultado é consolidado como
+     * no fechamento de um frete, com a mesma calculadora; sem dados completos,
+     * o custo fica incompleto, nunca zero.
+     *
+     * Viagem já finalizada não é cancelada: correções dela seguem pelo PUT.
+     */
+    public ViagemResponse cancelar(Long id, CancelamentoRequest req) {
+        Long empresaId = logado.empresaId();
+        Viagem v = travarComCaminhao(id, empresaId);
+        if (v.isCancelada()) {
+            throw RegraNegocioException.conflito("A viagem já está cancelada.");
+        }
+        if (v.isFinalizada()) {
+            throw RegraNegocioException.conflito(
+                    "Viagem finalizada não pode ser cancelada. Para ajustar valores, corrija a viagem.");
+        }
+        String motivo = texto(req.motivo());
+        if (motivo == null) {
+            throw RegraNegocioException.invalido("Informe o motivo do cancelamento.");
+        }
+
+        Estado estado = new Estado(v.getDataInicio(),
+                req.dataFim() != null ? req.dataFim() : hoje(),
+                v.getValorFrete(), v.getOrigem(), v.getDestino(),
+                v.getKmInicialVazio(), v.getKmInicialCarregado(), req.kmFinalCarregado(),
+                req.consumoMedioVazio() != null ? req.consumoMedioVazio() : v.getConsumoMedioVazio(),
+                req.consumoMedioCarregado() != null ? req.consumoMedioCarregado() : v.getConsumoMedioCarregado());
+        estado.validarCoerencia(politica.limites());
+        validarDatasDosLancamentos(v.getId(), empresaId, estado);
+        exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
+
+        estado.aplicar(v);
+        v.cancelar(usuarios.getReferenceById(logado.usuarioId()), motivo, agora());
         v.marcarAlteracao();
         consolidar(empresaId, v, true);
         return detalhar(empresaId, v);
@@ -371,7 +419,7 @@ public class ViagemService {
         }
     }
 
-    /** Depois de encerrada (finalizada), a viagem só é corrigida pelo DONO. */
+    /** Depois de encerrada (finalizada ou cancelada), a viagem só é corrigida pelo DONO. */
     void exigirAlteravelPeloPerfil(Viagem v) {
         if (logado.isMotorista() && v.getStatus() != StatusViagem.EM_ANDAMENTO) {
             throw RegraNegocioException.proibido(

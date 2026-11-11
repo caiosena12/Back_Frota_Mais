@@ -60,8 +60,8 @@ public class LancamentoService {
         Abastecimento a = abastecimento(v, id);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
         preencher(a, req);
-        if (v.isFinalizada()) {
-            // Correção explícita de um frete finalizado: regrava a fotografia só dele. A
+        if (v.isEncerrada()) {
+            // Correção explícita de um frete encerrado: regrava a fotografia só dele. A
             // referência de preço só é reavaliada se a correção envolve diesel.
             viagens.consolidar(logado.empresaId(), v, envolveDiesel);
         }
@@ -88,7 +88,7 @@ public class LancamentoService {
         Despesa d = despesa(v, id, TipoDespesa.PEDAGIO);
         d.setData(req.data());
         d.setValor(req.valor());
-        reconsolidarSeFinalizada(v);
+        reconsolidarSeEncerrada(v);
         return PedagioResponse.de(d);
     }
 
@@ -110,7 +110,7 @@ public class LancamentoService {
         Viagem v = viagemParaLancar(viagemId, req.data());
         Despesa d = despesa(v, id, TipoDespesa.EXTRA);
         preencher(d, req);
-        reconsolidarSeFinalizada(v);
+        reconsolidarSeEncerrada(v);
         return DespesaExtraResponse.de(d);
     }
 
@@ -122,14 +122,14 @@ public class LancamentoService {
     // ---- Regras comuns ----
 
     /**
-     * Inclusão de lançamento novo: só com a viagem em andamento. Depois da
-     * finalização o dono apenas corrige (PUT) os lançamentos existentes.
+     * Inclusão de lançamento novo: só com a viagem em andamento. Depois de
+     * finalizada ou cancelada, o dono apenas corrige (PUT) os lançamentos existentes.
      */
     private Viagem viagemParaIncluir(Long viagemId, LocalDate data) {
         Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
-        if (v.isFinalizada()) {
-            throw RegraNegocioException.conflito(
-                    "Viagem finalizada: não aceita novos lançamentos. Corrija um lançamento existente.");
+        if (v.isEncerrada()) {
+            throw RegraNegocioException.conflito("Viagem " + encerrada(v)
+                    + ": não aceita novos lançamentos. Corrija um lançamento existente.");
         }
         validarData(v, data);
         return v;
@@ -153,21 +153,25 @@ public class LancamentoService {
         RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, politica.limites());
     }
 
-    /** Correção de pedágio ou despesa de frete finalizado: regrava a fotografia só dele, com o mesmo preço. */
-    private void reconsolidarSeFinalizada(Viagem v) {
-        if (v.isFinalizada()) {
+    /** Correção de pedágio ou despesa de frete encerrado: regrava a fotografia só dele, com o mesmo preço. */
+    private void reconsolidarSeEncerrada(Viagem v) {
+        if (v.isEncerrada()) {
             viagens.consolidar(logado.empresaId(), v, false);
         }
     }
 
     private Viagem viagemParaExcluir(Long viagemId) {
         Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
-        if (v.isFinalizada()) {
-            throw RegraNegocioException.conflito(
-                    "Viagem finalizada: lançamentos podem ser corrigidos, mas não excluídos.");
+        if (v.isEncerrada()) {
+            throw RegraNegocioException.conflito("Viagem " + encerrada(v)
+                    + ": lançamentos podem ser corrigidos, mas não excluídos.");
         }
         v.marcarAlteracao();
         return v;
+    }
+
+    private static String encerrada(Viagem v) {
+        return v.isCancelada() ? "cancelada" : "finalizada";
     }
 
     private Abastecimento abastecimento(Viagem v, Long id) {

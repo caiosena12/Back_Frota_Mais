@@ -23,7 +23,8 @@ import jakarta.validation.Valid;
  *
  * DONO: tudo. MOTORISTA: só viagens de caminhões vinculados a ele (as demais
  * respondem 404); abre, altera enquanto em andamento, lança e finaliza; não
- * vê custos, lucro, margem nem indicadores; não cadastra viagem histórica.
+ * vê custos, lucro, margem nem indicadores; não cadastra viagem histórica
+ * nem cancela viagem.
  * Essas regras de dados ficam nos serviços (ViagemService, AcessoCaminhao);
  * aqui só a separação por perfil.
  */
@@ -86,5 +87,12 @@ public class ViagemController {
     @PostMapping("/{id}/finalizar")
     public ViagemResponse finalizar(@PathVariable Long id, @Valid @RequestBody FinalizacaoRequest request) {
         return service.finalizar(id, request);
+    }
+
+    /** Cancela uma viagem em andamento, com motivo obrigatório. Só DONO. */
+    @PostMapping("/{id}/cancelar")
+    @PreAuthorize("hasRole('DONO')")
+    public ViagemResponse cancelar(@PathVariable Long id, @Valid @RequestBody CancelamentoRequest request) {
+        return service.cancelar(id, request);
     }
 }
