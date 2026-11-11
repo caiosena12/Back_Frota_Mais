@@ -89,6 +89,20 @@ public class ViagemController {
         return service.finalizar(id, request);
     }
 
+    /** Trilha de auditoria: campos corrigidos depois do encerramento. Só DONO. */
+    @GetMapping("/{id}/alteracoes")
+    @PreAuthorize("hasRole('DONO')")
+    public List<AlteracaoViagemResponse> alteracoes(@PathVariable Long id) {
+        return service.alteracoes(id);
+    }
+
+    /** Versões anteriores da fotografia financeira, substituídas por correções. Só DONO. */
+    @GetMapping("/{id}/fotografias-anteriores")
+    @PreAuthorize("hasRole('DONO')")
+    public List<FotografiaAnteriorResponse> fotografiasAnteriores(@PathVariable Long id) {
+        return service.fotografiasAnteriores(id);
+    }
+
     /** Cancela uma viagem em andamento, com motivo obrigatório. Só DONO. */
     @PostMapping("/{id}/cancelar")
     @PreAuthorize("hasRole('DONO')")

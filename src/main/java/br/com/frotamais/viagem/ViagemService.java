@@ -24,6 +24,7 @@ import br.com.frotamais.seguranca.UsuarioLogado;
 import br.com.frotamais.usuario.Perfil;
 import br.com.frotamais.usuario.Usuario;
 import br.com.frotamais.usuario.UsuarioRepository;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Ciclo de vida do frete: abertura, alteração, finalização e consulta.
@@ -48,11 +49,21 @@ public class ViagemService {
     private final PoliticaCalculo politica;
     private final AcessoCaminhao acesso;
     private final VinculoMotoristaRepository vinculos;
+    private final AuditoriaViagem auditoria;
+    private final AlteracaoViagemRepository alteracoes;
+    private final FotografiaAnteriorRepository fotografias;
+    private final ObjectMapper json;
 
     public ViagemService(ViagemRepository viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, CaminhaoRepository caminhoes, EmpresaRepository empresas,
             UsuarioRepository usuarios, UsuarioLogado logado, RentabilidadeService rentabilidade,
-            PoliticaCalculo politica, AcessoCaminhao acesso, VinculoMotoristaRepository vinculos) {
+            PoliticaCalculo politica, AcessoCaminhao acesso, VinculoMotoristaRepository vinculos,
+            AuditoriaViagem auditoria, AlteracaoViagemRepository alteracoes,
+            FotografiaAnteriorRepository fotografias, ObjectMapper json) {
+        this.auditoria = auditoria;
+        this.alteracoes = alteracoes;
+        this.fotografias = fotografias;
+        this.json = json;
         this.acesso = acesso;
         this.vinculos = vinculos;
         this.politica = politica;
@@ -85,6 +96,26 @@ public class ViagemService {
         Viagem v = viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
         exigirAcesso(v);
         return detalhar(empresaId, v);
+    }
+
+    /** Campos corrigidos nas viagens encerradas, em ordem cronológica. Só DONO (controller). */
+    @Transactional(readOnly = true)
+    public List<AlteracaoViagemResponse> alteracoes(Long id) {
+        Long empresaId = logado.empresaId();
+        viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
+        return alteracoes.daViagem(id, empresaId).stream().map(AlteracaoViagemResponse::de).toList();
+    }
+
+    /** Versões anteriores da fotografia financeira, em ordem cronológica. Só DONO (controller). */
+    @Transactional(readOnly = true)
+    public List<FotografiaAnteriorResponse> fotografiasAnteriores(Long id) {
+        Long empresaId = logado.empresaId();
+        viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
+        return fotografias.daViagem(id, empresaId).stream()
+                .map(f -> new FotografiaAnteriorResponse(f.getId(), f.getSubstituidaEm(),
+                        f.getSubstituidaPor().getId(), f.getSubstituidaPor().getNome(),
+                        json.readTree(f.getResultado())))
+                .toList();
     }
 
     public ViagemResponse criar(ViagemCriacaoRequest req) {
@@ -282,10 +313,12 @@ public class ViagemService {
         validarDatasDosLancamentos(v.getId(), empresaId, estado);
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
+        Map<String, String> antes = v.isEncerrada() ? AuditoriaViagem.campos(v) : null;
         estado.aplicar(v);
         v.setMotorista(motorista);
         v.marcarAlteracao();
         if (v.isEncerrada()) {
+            auditoria.registrar(v, AlteracaoViagem.Entidade.VIAGEM, v.getId(), antes, AuditoriaViagem.campos(v));
             // Correção explícita de um frete encerrado: regrava a fotografia só dele,
             // com a referência de preço e a política de cálculo atuais.
             consolidar(empresaId, v, true);
@@ -371,8 +404,12 @@ public class ViagemService {
      * da viagem e na correção de diesel (a referência de preço é buscada de
      * novo); false na correção de Arla, pedágio ou despesa extra (mantém o
      * preço já congelado e recalcula o restante).
+     *
+     * A fotografia anterior, se existir, é arquivada antes (AuditoriaViagem).
      */
     void consolidar(Long empresaId, Viagem v, boolean reavaliarPreco) {
+        // Numa correção, a fotografia que vai ser substituída fica guardada.
+        auditoria.arquivarFotografia(v);
         viagens.flush();
         LimitesPlausibilidade limites = politica.limites();
         Instant agora = agora();

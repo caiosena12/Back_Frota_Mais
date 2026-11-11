@@ -1,6 +1,7 @@
 package br.com.frotamais.viagem;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +17,10 @@ import br.com.frotamais.usuario.UsuarioRepository;
  * token; depois busca o lançamento pelo id da viagem e da empresa. Assim um
  * id de lançamento de outra viagem ou de outra empresa responde 404.
  *
- * Inclusão e exclusão só com a viagem em andamento. Depois de finalizada, o
- * dono pode apenas corrigir (PUT) os lançamentos existentes, sem tirá-los do
- * período da viagem; nada é incluído nem apagado, para preservar o histórico.
+ * Inclusão e exclusão só com a viagem em andamento. Depois de encerrada
+ * (finalizada ou cancelada), o dono pode apenas corrigir (PUT) os lançamentos
+ * existentes, sem tirá-los do período da viagem; nada é incluído nem apagado,
+ * e cada campo corrigido fica registrado na auditoria (AuditoriaViagem).
  */
 @Service
 @Transactional
@@ -30,10 +32,12 @@ public class LancamentoService {
     private final UsuarioRepository usuarios;
     private final UsuarioLogado logado;
     private final PoliticaCalculo politica;
+    private final AuditoriaViagem auditoria;
 
     public LancamentoService(ViagemService viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, UsuarioRepository usuarios, UsuarioLogado logado,
-            PoliticaCalculo politica) {
+            PoliticaCalculo politica, AuditoriaViagem auditoria) {
+        this.auditoria = auditoria;
         this.politica = politica;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
@@ -59,8 +63,10 @@ public class LancamentoService {
         validarAbastecimento(v, req);
         Abastecimento a = abastecimento(v, id);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
+        Map<String, String> antes = AuditoriaViagem.campos(a);
         preencher(a, req);
         if (v.isEncerrada()) {
+            auditoria.registrar(v, AlteracaoViagem.Entidade.ABASTECIMENTO, a.getId(), antes, AuditoriaViagem.campos(a));
             // Correção explícita de um frete encerrado: regrava a fotografia só dele. A
             // referência de preço só é reavaliada se a correção envolve diesel.
             viagens.consolidar(logado.empresaId(), v, envolveDiesel);
@@ -86,9 +92,10 @@ public class LancamentoService {
     public PedagioResponse atualizarPedagio(Long viagemId, Long id, PedagioRequest req) {
         Viagem v = viagemParaLancar(viagemId, req.data());
         Despesa d = despesa(v, id, TipoDespesa.PEDAGIO);
+        Map<String, String> antes = AuditoriaViagem.campos(d);
         d.setData(req.data());
         d.setValor(req.valor());
-        reconsolidarSeEncerrada(v);
+        reconsolidarSeEncerrada(v, AlteracaoViagem.Entidade.PEDAGIO, d, antes);
         return PedagioResponse.de(d);
     }
 
@@ -109,8 +116,9 @@ public class LancamentoService {
     public DespesaExtraResponse atualizarDespesaExtra(Long viagemId, Long id, DespesaExtraRequest req) {
         Viagem v = viagemParaLancar(viagemId, req.data());
         Despesa d = despesa(v, id, TipoDespesa.EXTRA);
+        Map<String, String> antes = AuditoriaViagem.campos(d);
         preencher(d, req);
-        reconsolidarSeEncerrada(v);
+        reconsolidarSeEncerrada(v, AlteracaoViagem.Entidade.DESPESA_EXTRA, d, antes);
         return DespesaExtraResponse.de(d);
     }
 
@@ -154,8 +162,10 @@ public class LancamentoService {
     }
 
     /** Correção de pedágio ou despesa de frete encerrado: regrava a fotografia só dele, com o mesmo preço. */
-    private void reconsolidarSeEncerrada(Viagem v) {
+    private void reconsolidarSeEncerrada(Viagem v, AlteracaoViagem.Entidade entidade, Despesa d,
+            Map<String, String> antes) {
         if (v.isEncerrada()) {
+            auditoria.registrar(v, entidade, d.getId(), antes, AuditoriaViagem.campos(d));
             viagens.consolidar(logado.empresaId(), v, false);
         }
     }
