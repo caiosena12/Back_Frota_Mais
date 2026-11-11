@@ -86,6 +86,11 @@ public class Viagem {
     @JoinColumn(name = "criado_por_id", nullable = false)
     private Usuario criadoPor;
 
+    /** Quem dirigiu (MOTORISTA ou o próprio DONO). Diferente de criadoPor, quem registrou. Opcional. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "motorista_id")
+    private Usuario motorista;
+
     @Column(name = "criada_em", nullable = false)
     private Instant criadaEm = Instant.now();
 
@@ -200,6 +205,8 @@ public class Viagem {
     public BigDecimal getConsumoMedioCarregado() { return consumoMedioCarregado; }
     public void setConsumoMedioCarregado(BigDecimal consumoMedioCarregado) { this.consumoMedioCarregado = consumoMedioCarregado; }
     public Usuario getCriadoPor() { return criadoPor; }
+    public Usuario getMotorista() { return motorista; }
+    public void setMotorista(Usuario motorista) { this.motorista = motorista; }
     public void setCriadoPor(Usuario criadoPor) { this.criadoPor = criadoPor; }
     public Instant getCriadaEm() { return criadaEm; }
     public Instant getAtualizadaEm() { return atualizadaEm; }

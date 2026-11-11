@@ -19,16 +19,17 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 
 /**
- * Fretes. Acesso restrito ao DONO.
+ * Fretes.
  *
- * O MOTORISTA só pode ver e lançar dados dos caminhões vinculados a ele, e
- * esse vínculo ainda não existe (Anexo A, P12). Até existir, liberar o
- * MOTORISTA daria a ele acesso a todos os caminhões da empresa; por isso o
- * acesso fica negado (403).
+ * DONO: tudo. MOTORISTA: só viagens de caminhões vinculados a ele (as demais
+ * respondem 404); abre, altera enquanto em andamento, lança e finaliza; não
+ * vê custos, lucro, margem nem indicadores; não cadastra viagem histórica.
+ * Essas regras de dados ficam nos serviços (ViagemService, AcessoCaminhao);
+ * aqui só a separação por perfil.
  */
 @RestController
 @RequestMapping("/api/viagens")
-@PreAuthorize("hasRole('DONO')")
+@PreAuthorize("hasAnyRole('DONO', 'MOTORISTA')")
 public class ViagemController {
 
     private final ViagemService service;
@@ -47,6 +48,7 @@ public class ViagemController {
     }
 
     @GetMapping("/indicadores")
+    @PreAuthorize("hasRole('DONO')")
     public IndicadoresResponse indicadores(
             @RequestParam(required = false) Integer ano,
             @RequestParam(required = false) Integer mes,
@@ -68,8 +70,9 @@ public class ViagemController {
         return service.criar(request);
     }
 
-    /** Frete esquecido, cadastrado já finalizado, com seus lançamentos. Só DONO (regra da classe). */
+    /** Frete esquecido, cadastrado já finalizado, com seus lançamentos. Só DONO. */
     @PostMapping("/historicas")
+    @PreAuthorize("hasRole('DONO')")
     @ResponseStatus(HttpStatus.CREATED)
     public ViagemResponse criarHistorica(@Valid @RequestBody ViagemHistoricaRequest request) {
         return service.criarHistorica(request);

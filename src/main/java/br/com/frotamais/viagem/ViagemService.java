@@ -13,12 +13,15 @@ import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.com.frotamais.caminhao.AcessoCaminhao;
 import br.com.frotamais.caminhao.Caminhao;
+import br.com.frotamais.caminhao.VinculoMotoristaRepository;
 import br.com.frotamais.caminhao.CaminhaoRepository;
 import br.com.frotamais.comum.Datas;
 import br.com.frotamais.comum.RegraNegocioException;
 import br.com.frotamais.empresa.EmpresaRepository;
 import br.com.frotamais.seguranca.UsuarioLogado;
+import br.com.frotamais.usuario.Perfil;
 import br.com.frotamais.usuario.Usuario;
 import br.com.frotamais.usuario.UsuarioRepository;
 
@@ -43,11 +46,15 @@ public class ViagemService {
     private final UsuarioLogado logado;
     private final RentabilidadeService rentabilidade;
     private final PoliticaCalculo politica;
+    private final AcessoCaminhao acesso;
+    private final VinculoMotoristaRepository vinculos;
 
     public ViagemService(ViagemRepository viagens, AbastecimentoRepository abastecimentos,
             DespesaRepository despesas, CaminhaoRepository caminhoes, EmpresaRepository empresas,
             UsuarioRepository usuarios, UsuarioLogado logado, RentabilidadeService rentabilidade,
-            PoliticaCalculo politica) {
+            PoliticaCalculo politica, AcessoCaminhao acesso, VinculoMotoristaRepository vinculos) {
+        this.acesso = acesso;
+        this.vinculos = vinculos;
         this.politica = politica;
         this.viagens = viagens;
         this.abastecimentos = abastecimentos;
@@ -62,6 +69,11 @@ public class ViagemService {
     @Transactional(readOnly = true)
     public List<ViagemResumoResponse> listar(StatusViagem status, Long caminhaoId) {
         Long empresaId = logado.empresaId();
+        if (logado.isMotorista()) {
+            // Só caminhões vinculados, e sem custo, lucro e margem.
+            return viagens.listarDoMotorista(empresaId, logado.usuarioId(), status, caminhaoId).stream()
+                    .map(v -> ViagemResumoResponse.de(v, null)).toList();
+        }
         List<Viagem> lista = viagens.listar(empresaId, status, caminhaoId);
         Map<Long, RentabilidadeResponse> calculos = rentabilidade.calcular(empresaId, lista);
         return lista.stream().map(v -> ViagemResumoResponse.de(v, calculos.get(v.getId()))).toList();
@@ -70,13 +82,19 @@ public class ViagemService {
     @Transactional(readOnly = true)
     public ViagemResponse buscar(Long id) {
         Long empresaId = logado.empresaId();
-        return detalhar(empresaId, viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada));
+        Viagem v = viagens.findByIdAndEmpresaId(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
+        exigirAcesso(v);
+        return detalhar(empresaId, v);
     }
 
     public ViagemResponse criar(ViagemCriacaoRequest req) {
         Long empresaId = logado.empresaId();
 
         Caminhao caminhao = travarCaminhaoParaAbertura(req.caminhaoId(), empresaId);
+        if (!acesso.podeVer(caminhao)) {
+            throw AcessoCaminhao.naoEncontrado();
+        }
+        Usuario motorista = resolverMotorista(empresaId, caminhao, req.motoristaId(), true);
         if (viagens.existsByEmpresaIdAndCaminhaoIdAndStatus(empresaId, caminhao.getId(), StatusViagem.EM_ANDAMENTO)) {
             throw RegraNegocioException.conflito(
                     "Este caminhão já tem uma viagem em andamento. Finalize-a antes de abrir outra.");
@@ -90,6 +108,7 @@ public class ViagemService {
 
         Viagem v = nova(empresaId, caminhao);
         estado.aplicar(v);
+        v.setMotorista(motorista);
         viagens.save(v);
         return detalhar(empresaId, v);
     }
@@ -109,6 +128,7 @@ public class ViagemService {
         Long empresaId = logado.empresaId();
         LimitesPlausibilidade limites = politica.limites();
         Caminhao caminhao = travarCaminhaoParaHistorica(req.caminhaoId(), empresaId, req.dataFim());
+        Usuario motorista = resolverMotorista(empresaId, caminhao, req.motoristaId(), false);
 
         Estado estado = new Estado(req.dataInicio(), req.dataFim(), req.valorFrete(), texto(req.origem()),
                 texto(req.destino()), req.kmInicialVazio(), req.kmInicialCarregado(), req.kmFinalCarregado(),
@@ -130,6 +150,7 @@ public class ViagemService {
         Instant agora = agora();
         Viagem v = nova(empresaId, caminhao);
         estado.aplicar(v);
+        v.setMotorista(motorista);
         v.setStatus(StatusViagem.FINALIZADA);
         v.setFinalizadaEm(agora);
         v.setCadastroRetroativoEm(agora);
@@ -228,6 +249,16 @@ public class ViagemService {
     public ViagemResponse atualizar(Long id, ViagemAtualizacaoRequest req) {
         Long empresaId = logado.empresaId();
         Viagem v = travarComCaminhao(id, empresaId);
+        exigirAlteravelPeloPerfil(v);
+        Usuario motorista;
+        if (logado.isMotorista()) {
+            if (req.motoristaId() != null && !req.motoristaId().equals(logado.usuarioId())) {
+                throw RegraNegocioException.proibido("O motorista não troca o responsável pela viagem.");
+            }
+            motorista = v.getMotorista();
+        } else {
+            motorista = resolverMotorista(empresaId, v.getCaminhao(), req.motoristaId(), !v.isFinalizada());
+        }
 
         if (!v.isFinalizada() && (req.dataFim() != null || req.kmFinalCarregado() != null)) {
             throw RegraNegocioException.invalido(
@@ -249,6 +280,7 @@ public class ViagemService {
         exigirSemSobreposicao(empresaId, v.getCaminhao().getId(), estado, v.getId());
 
         estado.aplicar(v);
+        v.setMotorista(motorista);
         v.marcarAlteracao();
         if (v.isFinalizada()) {
             // Correção explícita de um frete finalizado: regrava a fotografia só dele,
@@ -320,7 +352,65 @@ public class ViagemService {
     private Viagem travarComCaminhao(Long id, Long empresaId) {
         Long caminhaoId = viagens.caminhaoDaViagem(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
         caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId).orElseThrow(ViagemService::naoEncontrada);
-        return travar(id, empresaId);
+        Viagem v = travar(id, empresaId);
+        exigirAcesso(v);
+        return v;
+    }
+
+    /** Travar + conferir que o usuário logado enxerga a viagem (MOTORISTA: caminhão vinculado). */
+    Viagem travarAcessivel(Long id, Long empresaId) {
+        Viagem v = travar(id, empresaId);
+        exigirAcesso(v);
+        return v;
+    }
+
+    /** MOTORISTA só alcança viagens de caminhões vinculados a ele; as demais respondem 404. */
+    void exigirAcesso(Viagem v) {
+        if (!acesso.podeVer(v.getCaminhao())) {
+            throw naoEncontrada();
+        }
+    }
+
+    /** Depois de encerrada (finalizada), a viagem só é corrigida pelo DONO. */
+    void exigirAlteravelPeloPerfil(Viagem v) {
+        if (logado.isMotorista() && v.getStatus() != StatusViagem.EM_ANDAMENTO) {
+            throw RegraNegocioException.proibido(
+                    "Viagem encerrada não pode ser alterada pelo motorista. Correções são feitas pelo dono.");
+        }
+    }
+
+    /**
+     * Motorista responsável pela viagem.
+     *
+     * MOTORISTA logado: é sempre ele mesmo (informar outro é recusado).
+     * DONO: pode deixar sem motorista, indicar a si mesmo ou outro usuário da
+     * empresa com perfil MOTORISTA ou DONO. Em viagem que está acontecendo
+     * (operacional = true) o indicado precisa estar ativo e, se MOTORISTA,
+     * vinculado ao caminhão. Em viagem já encerrada (histórica ou correção)
+     * basta ser usuário da empresa: o vínculo pode ter mudado desde então.
+     */
+    private Usuario resolverMotorista(Long empresaId, Caminhao caminhao, Long motoristaId, boolean operacional) {
+        if (logado.isMotorista()) {
+            if (motoristaId != null && !motoristaId.equals(logado.usuarioId())) {
+                throw RegraNegocioException.proibido("O motorista só abre viagem em seu próprio nome.");
+            }
+            return usuarios.getReferenceById(logado.usuarioId());
+        }
+        if (motoristaId == null) {
+            return null;
+        }
+        Usuario u = usuarios.findByIdAndEmpresaId(motoristaId, empresaId)
+                .orElseThrow(() -> RegraNegocioException.naoEncontrado("Motorista não encontrado."));
+        if (operacional) {
+            if (!u.isAtivo()) {
+                throw RegraNegocioException.conflito("O motorista indicado não está ativo.");
+            }
+            if (u.getPerfil() == Perfil.MOTORISTA
+                    && !vinculos.existsByMotoristaIdAndCaminhaoIdAndCaminhaoEmpresaId(u.getId(), caminhao.getId(), empresaId)) {
+                throw RegraNegocioException.conflito("O motorista indicado não está vinculado a este caminhão.");
+            }
+        }
+        return u;
     }
 
     /**
@@ -347,12 +437,13 @@ public class ViagemService {
         return LocalDate.now(FUSO);
     }
 
+    /** Na visão do MOTORISTA, a rentabilidade (custos, lucro, margem) não é enviada. */
     private ViagemResponse detalhar(Long empresaId, Viagem v) {
         viagens.flush();
         return ViagemResponse.de(v,
                 abastecimentos.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(v.getId(), empresaId),
                 despesas.findAllByViagemIdAndViagemEmpresaIdOrderByDataAscIdAsc(v.getId(), empresaId),
-                rentabilidade.calcular(empresaId, v));
+                logado.isMotorista() ? null : rentabilidade.calcular(empresaId, v));
     }
 
     /** Todos os lançamentos precisam estar entre a data de início e a data final da viagem. */

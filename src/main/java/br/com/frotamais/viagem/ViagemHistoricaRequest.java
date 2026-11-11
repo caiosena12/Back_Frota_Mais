@@ -25,6 +25,8 @@ import jakarta.validation.constraints.Size;
  */
 public record ViagemHistoricaRequest(
         @NotNull Long caminhaoId,
+        /** Quem dirigiu, se conhecido (motorista ou dono da empresa). */
+        Long motoristaId,
         @NotNull LocalDate dataInicio,
         @NotNull LocalDate dataFim,
         @NotBlank @Size(max = 120) String origem,

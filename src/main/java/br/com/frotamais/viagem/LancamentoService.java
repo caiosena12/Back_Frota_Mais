@@ -126,7 +126,7 @@ public class LancamentoService {
      * finalização o dono apenas corrige (PUT) os lançamentos existentes.
      */
     private Viagem viagemParaIncluir(Long viagemId, LocalDate data) {
-        Viagem v = viagens.travar(viagemId, logado.empresaId());
+        Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
         if (v.isFinalizada()) {
             throw RegraNegocioException.conflito(
                     "Viagem finalizada: não aceita novos lançamentos. Corrija um lançamento existente.");
@@ -137,7 +137,8 @@ public class LancamentoService {
 
     /** Localiza a viagem da empresa e confere se a data do lançamento cabe no período dela. */
     private Viagem viagemParaLancar(Long viagemId, LocalDate data) {
-        Viagem v = viagens.travar(viagemId, logado.empresaId());
+        Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
+        viagens.exigirAlteravelPeloPerfil(v);
         validarData(v, data);
         return v;
     }
@@ -160,7 +161,7 @@ public class LancamentoService {
     }
 
     private Viagem viagemParaExcluir(Long viagemId) {
-        Viagem v = viagens.travar(viagemId, logado.empresaId());
+        Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
         if (v.isFinalizada()) {
             throw RegraNegocioException.conflito(
                     "Viagem finalizada: lançamentos podem ser corrigidos, mas não excluídos.");

@@ -21,6 +21,8 @@ import jakarta.validation.constraints.Size;
  */
 public record ViagemCriacaoRequest(
         @NotNull Long caminhaoId,
+        /** Quem vai dirigir. MOTORISTA abrindo: ausente ou ele mesmo. DONO: um motorista vinculado, ele mesmo ou ausente. */
+        Long motoristaId,
         @NotNull LocalDate dataInicio,
         @Size(max = 120) String origem,
         @Size(max = 120) String destino,

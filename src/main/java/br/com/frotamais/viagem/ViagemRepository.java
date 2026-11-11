@@ -60,7 +60,7 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             @Param("ignorarId") Long ignorarId);
 
     @Query("""
-            select v from Viagem v join fetch v.caminhao c
+            select v from Viagem v join fetch v.caminhao c left join fetch v.motorista
             where v.empresa.id = :empresaId
               and (:status is null or v.status = :status)
               and (:caminhaoId is null or c.id = :caminhaoId)
@@ -68,6 +68,26 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             """)
     List<Viagem> listar(
             @Param("empresaId") Long empresaId,
+            @Param("status") StatusViagem status,
+            @Param("caminhaoId") Long caminhaoId);
+
+    /**
+     * Viagens dos caminhões vinculados ao motorista (não excluídos). Só as que
+     * ele pode ver: o vínculo é conferido na própria consulta.
+     */
+    @Query("""
+            select v from Viagem v join fetch v.caminhao c left join fetch v.motorista
+            where v.empresa.id = :empresaId
+              and c.status <> br.com.frotamais.caminhao.StatusCaminhao.EXCLUIDO
+              and exists (select 1 from VinculoMotorista vm
+                          where vm.caminhao = c and vm.motorista.id = :motoristaId)
+              and (:status is null or v.status = :status)
+              and (:caminhaoId is null or c.id = :caminhaoId)
+            order by v.dataInicio desc, v.id desc
+            """)
+    List<Viagem> listarDoMotorista(
+            @Param("empresaId") Long empresaId,
+            @Param("motoristaId") Long motoristaId,
             @Param("status") StatusViagem status,
             @Param("caminhaoId") Long caminhaoId);
 

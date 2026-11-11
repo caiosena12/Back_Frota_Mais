@@ -26,5 +26,7 @@ public record ViagemAtualizacaoRequest(
         @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioVazio,
         @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioCarregado,
         LocalDate dataFim,
-        @PositiveOrZero @Max(9_999_999) Integer kmFinalCarregado) {
+        @PositiveOrZero @Max(9_999_999) Integer kmFinalCarregado,
+        /** PUT do DONO substitui (ausente = sem motorista). O MOTORISTA não troca o responsável. */
+        Long motoristaId) {
 }
