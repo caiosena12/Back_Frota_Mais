@@ -442,7 +442,7 @@ public class ViagemService {
      * (a mesma da abertura), para que a checagem de sobreposição de períodos não
      * concorra com outra abertura ou alteração de datas no mesmo caminhão.
      */
-    private Viagem travarComCaminhao(Long id, Long empresaId) {
+    Viagem travarComCaminhao(Long id, Long empresaId) {
         Long caminhaoId = viagens.caminhaoDaViagem(id, empresaId).orElseThrow(ViagemService::naoEncontrada);
         caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId).orElseThrow(ViagemService::naoEncontrada);
         Viagem v = travar(id, empresaId);

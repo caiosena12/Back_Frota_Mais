@@ -49,7 +49,7 @@ public class LancamentoService {
     // ---- Abastecimentos (diesel e Arla) ----
 
     public AbastecimentoResponse adicionarAbastecimento(Long viagemId, AbastecimentoRequest req) {
-        Viagem v = viagemParaIncluir(viagemId, null);
+        Viagem v = viagemParaIncluir(viagemId, null, true);
         viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
         validarAbastecimento(v, req);
         Abastecimento a = new Abastecimento();
@@ -60,7 +60,7 @@ public class LancamentoService {
     }
 
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
-        Viagem v = viagemParaLancar(viagemId, null);
+        Viagem v = viagemParaLancar(viagemId, null, true);
         viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
         validarAbastecimento(v, req);
         Abastecimento a = abastecimento(v, id);
@@ -84,7 +84,7 @@ public class LancamentoService {
     // ---- Pedágios ----
 
     public PedagioResponse adicionarPedagio(Long viagemId, PedagioRequest req) {
-        Viagem v = viagemParaIncluir(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, req.data(), false);
         Despesa d = novaDespesa(v, TipoDespesa.PEDAGIO);
         d.setData(req.data());
         d.setValor(req.valor());
@@ -92,7 +92,7 @@ public class LancamentoService {
     }
 
     public PedagioResponse atualizarPedagio(Long viagemId, Long id, PedagioRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaLancar(viagemId, req.data(), false);
         Despesa d = despesa(v, id, TipoDespesa.PEDAGIO);
         Map<String, String> antes = AuditoriaViagem.campos(d);
         d.setData(req.data());
@@ -109,14 +109,14 @@ public class LancamentoService {
     // ---- Despesas extras ----
 
     public DespesaExtraResponse adicionarDespesaExtra(Long viagemId, DespesaExtraRequest req) {
-        Viagem v = viagemParaIncluir(viagemId, req.data());
+        Viagem v = viagemParaIncluir(viagemId, req.data(), false);
         Despesa d = novaDespesa(v, TipoDespesa.EXTRA);
         preencher(d, req);
         return DespesaExtraResponse.de(despesas.save(d));
     }
 
     public DespesaExtraResponse atualizarDespesaExtra(Long viagemId, Long id, DespesaExtraRequest req) {
-        Viagem v = viagemParaLancar(viagemId, req.data());
+        Viagem v = viagemParaLancar(viagemId, req.data(), false);
         Despesa d = despesa(v, id, TipoDespesa.EXTRA);
         Map<String, String> antes = AuditoriaViagem.campos(d);
         preencher(d, req);
@@ -135,8 +135,8 @@ public class LancamentoService {
      * Inclusão de lançamento novo: só com a viagem em andamento. Depois de
      * finalizada ou cancelada, o dono apenas corrige (PUT) os lançamentos existentes.
      */
-    private Viagem viagemParaIncluir(Long viagemId, LocalDate data) {
-        Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
+    private Viagem viagemParaIncluir(Long viagemId, LocalDate data, boolean abastecimento) {
+        Viagem v = travar(viagemId, abastecimento);
         if (v.isEncerrada()) {
             throw RegraNegocioException.conflito("Viagem " + encerrada(v)
                     + ": não aceita novos lançamentos. Corrija um lançamento existente.");
@@ -146,11 +146,25 @@ public class LancamentoService {
     }
 
     /** Localiza a viagem da empresa e confere se a data do lançamento cabe no período dela. */
-    private Viagem viagemParaLancar(Long viagemId, LocalDate data) {
-        Viagem v = viagens.travarAcessivel(viagemId, logado.empresaId());
+    private Viagem viagemParaLancar(Long viagemId, LocalDate data, boolean abastecimento) {
+        Viagem v = travar(viagemId, abastecimento);
         viagens.exigirAlteravelPeloPerfil(v);
         validarData(v, data);
         return v;
+    }
+
+    /**
+     * Abastecimento: bloqueia o caminhão antes da viagem (mesma ordem da
+     * abertura e das correções de datas). Ele pode ter data anterior ao início,
+     * validada contra o fim da viagem anterior do caminhão; sem esse bloqueio,
+     * uma correção simultânea da viagem anterior poderia passar a data final
+     * dela para depois deste abastecimento sem enxergá-lo. Pedágios e despesas
+     * ficam dentro do período da própria viagem e bloqueiam só ela.
+     */
+    private Viagem travar(Long viagemId, boolean abastecimento) {
+        return abastecimento
+                ? viagens.travarComCaminhao(viagemId, logado.empresaId())
+                : viagens.travarAcessivel(viagemId, logado.empresaId());
     }
 
     /** data nula: a data é validada pelo chamador (abastecimento, que tem regra própria). */

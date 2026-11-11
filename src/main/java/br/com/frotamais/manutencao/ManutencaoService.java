@@ -98,7 +98,8 @@ public class ManutencaoService {
     }
 
     private Caminhao caminhaoOperacional(Long caminhaoId, Long empresaId) {
-        Caminhao c = caminhoes.findByIdAndEmpresaId(caminhaoId, empresaId)
+        // Bloqueia o caminhão (como a exclusão dele), para uma exclusão simultânea não passar despercebida.
+        Caminhao c = caminhoes.travarPorIdEEmpresa(caminhaoId, empresaId)
                 .orElseThrow(() -> RegraNegocioException.naoEncontrado("Caminhão não encontrado."));
         if (c.isExcluido()) {
             throw RegraNegocioException.conflito("Caminhão excluído não recebe manutenções.");
