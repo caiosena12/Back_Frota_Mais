@@ -285,8 +285,23 @@ public class ViagemService {
                             + " antes da inativação, em " + inativacao + ".");
                 }
             }
-            case EXCLUIDO -> throw RegraNegocioException.conflito(
-                    "Caminhão excluído não recebe cadastro de viagem histórica.");
+            case EXCLUIDO -> {
+                // Só o que aconteceu antes da exclusão (e, se ele estava inativo
+                // antes de ser excluído, antes da inativação). Não reativa o caminhão.
+                LocalDate exclusao = caminhao.dataExclusao(FUSO);
+                if (exclusao == null) {
+                    throw RegraNegocioException.conflito("A data de exclusão deste caminhão não é conhecida;"
+                            + " não é possível cadastrar viagem histórica nele.");
+                }
+                LocalDate inativacao = caminhao.dataInativacao(FUSO);
+                boolean inativoAntes = inativacao != null && inativacao.isBefore(exclusao);
+                LocalDate limite = inativoAntes ? inativacao : exclusao;
+                if (!dataFim.isBefore(limite)) {
+                    throw RegraNegocioException.conflito("Caminhão excluído só recebe viagem histórica que terminou"
+                            + " antes de " + (inativoAntes ? "sua inativação" : "sua exclusão")
+                            + ", em " + limite + ".");
+                }
+            }
         }
         return caminhao;
     }

@@ -77,6 +77,11 @@ public class Caminhao {
     public void setMarca(String marca) { this.marca = marca; }
     public Integer getEixos() { return eixos; }
     public void setEixos(Integer eixos) { this.eixos = eixos; }
+    /** Data local da exclusão lógica; nula se não excluído. */
+    public LocalDate dataExclusao(ZoneId fuso) {
+        return excluidoEm == null ? null : LocalDate.ofInstant(excluidoEm, fuso);
+    }
+
     public Instant getInativadoEm() { return inativadoEm; }
     public void setInativadoEm(Instant inativadoEm) { this.inativadoEm = inativadoEm; }
     public Instant getExcluidoEm() { return excluidoEm; }

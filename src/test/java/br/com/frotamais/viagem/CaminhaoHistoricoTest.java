@@ -177,9 +177,27 @@ class CaminhaoHistoricoTest extends ApiViagemTeste {
     }
 
     @Test
-    void viagemHistoricaEmCaminhaoExcluidoERecusada() throws Exception {
+    void viagemHistoricaEmCaminhaoExcluidoSoAntesDaExclusao() throws Exception {
         chamar(DELETE("/api/caminhoes/" + caminhaoId), token, null, 204);
-        erro(chamar(POST(VIAGENS + "/historicas"), token, historica("2025-02-01", "2025-02-03"), 409), "excluído");
+        String hoje = Datas.hoje().toString();
+
+        // Terminou antes da exclusão (hoje): aceita, e o caminhão continua excluído.
+        JsonNode v = chamar(POST(VIAGENS + "/historicas"), token, historica("2025-02-01", "2025-02-03"), 201);
+        assertEquals("FINALIZADA", v.get("status").asString());
+        assertEquals("EXCLUIDO", caminhaoAtual().get("status").asString());
+        assertFalse(listado("/api/caminhoes"));
+
+        // No dia da exclusão: recusa. Operação nova continua proibida.
+        erro(chamar(POST(VIAGENS + "/historicas"), token, historica(hoje, hoje), 409), "antes de sua exclusão");
+        erro(chamar(POST(VIAGENS), token, corpo("caminhaoId", caminhaoId, "dataInicio", hoje,
+                "kmInicialVazio", 0), 409), "excluído");
+    }
+
+    @Test
+    void historicaEmCaminhaoExcluidoSoPeloDono() throws Exception {
+        String motorista = criarMotorista(token, caminhaoId).token();
+        chamar(DELETE("/api/caminhoes/" + caminhaoId), token, null, 204);
+        chamar(POST(VIAGENS + "/historicas"), motorista, historica("2025-02-01", "2025-02-03"), 403);
     }
 
     @Test
