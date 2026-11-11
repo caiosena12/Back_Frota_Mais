@@ -56,7 +56,10 @@ public class LancamentoService {
         a.setViagem(v);
         a.setCriadoPor(usuarios.getReferenceById(logado.usuarioId()));
         preencher(a, req);
-        return AbastecimentoResponse.de(abastecimentos.save(a));
+        abastecimentos.save(a);
+        registrarInclusaoSeCancelada(v, AlteracaoViagem.Entidade.ABASTECIMENTO, a.getId(),
+                AuditoriaViagem.campos(a), a.getTipo() == TipoCombustivel.DIESEL);
+        return AbastecimentoResponse.de(a);
     }
 
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
@@ -88,7 +91,9 @@ public class LancamentoService {
         Despesa d = novaDespesa(v, TipoDespesa.PEDAGIO);
         d.setData(req.data());
         d.setValor(req.valor());
-        return PedagioResponse.de(despesas.save(d));
+        despesas.save(d);
+        registrarInclusaoSeCancelada(v, AlteracaoViagem.Entidade.PEDAGIO, d.getId(), AuditoriaViagem.campos(d), false);
+        return PedagioResponse.de(d);
     }
 
     public PedagioResponse atualizarPedagio(Long viagemId, Long id, PedagioRequest req) {
@@ -112,7 +117,10 @@ public class LancamentoService {
         Viagem v = viagemParaIncluir(viagemId, req.data(), false);
         Despesa d = novaDespesa(v, TipoDespesa.EXTRA);
         preencher(d, req);
-        return DespesaExtraResponse.de(despesas.save(d));
+        despesas.save(d);
+        registrarInclusaoSeCancelada(v, AlteracaoViagem.Entidade.DESPESA_EXTRA, d.getId(),
+                AuditoriaViagem.campos(d), false);
+        return DespesaExtraResponse.de(d);
     }
 
     public DespesaExtraResponse atualizarDespesaExtra(Long viagemId, Long id, DespesaExtraRequest req) {
@@ -132,17 +140,33 @@ public class LancamentoService {
     // ---- Regras comuns ----
 
     /**
-     * Inclusão de lançamento novo: só com a viagem em andamento. Depois de
-     * finalizada ou cancelada, o dono apenas corrige (PUT) os lançamentos existentes.
+     * Inclusão de lançamento novo:
+     * - viagem em andamento: DONO ou MOTORISTA com acesso;
+     * - viagem cancelada: só o DONO (valores reais da operação cancelada, como
+     *   despesas que surgiram depois), dentro do período; fica na auditoria;
+     * - viagem finalizada: ninguém; o dono corrige (PUT) os lançamentos existentes.
      */
     private Viagem viagemParaIncluir(Long viagemId, LocalDate data, boolean abastecimento) {
         Viagem v = travar(viagemId, abastecimento);
-        if (v.isEncerrada()) {
-            throw RegraNegocioException.conflito("Viagem " + encerrada(v)
-                    + ": não aceita novos lançamentos. Corrija um lançamento existente.");
+        if (v.isFinalizada()) {
+            throw RegraNegocioException.conflito(
+                    "Viagem finalizada: não aceita novos lançamentos. Corrija um lançamento existente.");
         }
+        viagens.exigirAlteravelPeloPerfil(v);
         validarData(v, data);
         return v;
+    }
+
+    /**
+     * Lançamento incluído em viagem cancelada: entra na auditoria (sem valor
+     * anterior) e a fotografia da viagem é regravada, com a anterior arquivada.
+     */
+    private void registrarInclusaoSeCancelada(Viagem v, AlteracaoViagem.Entidade entidade, Long id,
+            Map<String, String> campos, boolean envolveDiesel) {
+        if (v.isCancelada()) {
+            auditoria.registrar(v, entidade, id, Map.of(), campos);
+            viagens.consolidar(logado.empresaId(), v, envolveDiesel);
+        }
     }
 
     /** Localiza a viagem da empresa e confere se a data do lançamento cabe no período dela. */

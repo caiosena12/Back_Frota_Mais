@@ -33,8 +33,18 @@ import java.util.List;
  * custoManutencoes no período, e resultadoAposManutencoes = lucroTotal −
  * custoManutencoes, o resultado do período do caminhão ou da empresa.
  *
- * Viagens canceladas não entram aqui (nem como fretes concluídos nem, por
- * enquanto, no resultado do período).
+ * Viagens canceladas (bloco separado; nunca contam como fretes concluídos
+ * nem entram nos indicadores acima): entram pelo mês da data do
+ * cancelamento (data final da viagem cancelada). receitaCanceladas soma os
+ * valores recebidos informados no campo do frete; custoCanceladas soma os
+ * custos conhecidos (Arla, pedágios, despesas e o diesel quando calculável);
+ * as canceladas cujo diesel não pôde ser calculado ficam listadas em
+ * canceladasComCustoIncompleto (o diesel delas não entra como zero: fica de
+ * fora da soma). resultadoCanceladas = receitaCanceladas − custoCanceladas.
+ *
+ * resultadoFinanceiroPeriodo = lucroTotal + resultadoCanceladas −
+ * custoManutencoes: o financeiro geral do período, sem dupla contagem (cada
+ * viagem está em um único bloco).
  */
 public record IndicadoresResponse(
         LocalDate de,
@@ -66,5 +76,11 @@ public record IndicadoresResponse(
         BigDecimal diferencaDieselPagoEstimado,
         long quantidadeManutencoes,
         BigDecimal custoManutencoes,
-        BigDecimal resultadoAposManutencoes) {
+        BigDecimal resultadoAposManutencoes,
+        int viagensCanceladas,
+        List<Long> canceladasComCustoIncompleto,
+        BigDecimal receitaCanceladas,
+        BigDecimal custoCanceladas,
+        BigDecimal resultadoCanceladas,
+        BigDecimal resultadoFinanceiroPeriodo) {
 }

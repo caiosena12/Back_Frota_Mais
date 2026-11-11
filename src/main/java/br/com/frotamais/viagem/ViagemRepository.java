@@ -123,4 +123,24 @@ public interface ViagemRepository extends JpaRepository<Viagem, Long> {
             @Param("de") LocalDate de,
             @Param("ate") LocalDate ate,
             @Param("caminhaoId") Long caminhaoId);
+
+    /**
+     * Viagens canceladas cuja data do cancelamento está no período. A data do
+     * cancelamento é a data final da viagem cancelada (informada no
+     * cancelamento, padrão: o dia em que foi feito).
+     */
+    @Query("""
+            select v from Viagem v join fetch v.caminhao c
+            where v.empresa.id = :empresaId
+              and v.status = br.com.frotamais.viagem.StatusViagem.CANCELADA
+              and (cast(:de as date) is null or v.dataFim >= :de)
+              and (cast(:ate as date) is null or v.dataFim <= :ate)
+              and (:caminhaoId is null or c.id = :caminhaoId)
+            order by v.dataFim, v.id
+            """)
+    List<Viagem> canceladasNoPeriodo(
+            @Param("empresaId") Long empresaId,
+            @Param("de") LocalDate de,
+            @Param("ate") LocalDate ate,
+            @Param("caminhaoId") Long caminhaoId);
 }

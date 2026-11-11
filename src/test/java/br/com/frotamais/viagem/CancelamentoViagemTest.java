@@ -138,9 +138,13 @@ class CancelamentoViagemTest extends ApiViagemTeste {
         cancelar(dono, corpo("motivo", "Carga retida", "dataFim", "2025-06-03",
                 "kmFinalCarregado", 1200, "consumoMedioCarregado", "2.50"), 200);
 
-        // Sem lançamento novo nem exclusão, para ninguém.
-        erro(chamar(POST(url + "/pedagios"), dono, corpo("data", "2025-06-02", "valor", "5.00"), 409), "cancelada");
+        // Exclusão de lançamento: ninguém. Lançamento novo: só o dono.
         erro(chamar(DELETE(url + "/pedagios/" + pedagioId), dono, null, 409), "cancelada");
+        chamar(POST(url + "/pedagios"), motorista.token(), corpo("data", "2025-06-02", "valor", "5.00"), 403);
+        chamar(POST(url + "/despesas-extras"), motorista.token(), corpo("descricao", "x", "data", "2025-06-02",
+                "valor", "5.00"), 403);
+        chamar(POST(url + "/abastecimentos"), motorista.token(), corpo("tipo", "DIESEL", "data", "2025-06-02",
+                "litros", "10", "valorTotal", "60.00"), 403);
         // Motorista não altera viagem encerrada.
         chamar(PUT(url + "/pedagios/" + pedagioId), motorista.token(),
                 corpo("data", "2025-06-02", "valor", "1.00"), 403);

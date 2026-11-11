@@ -27,8 +27,8 @@ import br.com.frotamais.manutencao.TotalManutencao;
 import br.com.frotamais.seguranca.UsuarioLogado;
 
 /**
- * Totais dos fretes finalizados e das manutenções num período, para o
- * dashboard e os relatórios.
+ * Totais dos fretes finalizados, das viagens canceladas (em bloco separado)
+ * e das manutenções num período, para o dashboard e os relatórios.
  *
  * O período é aplicado sobre a data final (descarga) do frete e sobre a data
  * da manutenção. Filtros (mutuamente exclusivos): ano; ano e mês
@@ -84,8 +84,10 @@ public class IndicadorService {
             throw RegraNegocioException.naoEncontrado("Caminhão não encontrado.");
         }
         Base base = base(empresaId, viagens.finalizadasNoPeriodo(empresaId, p.de(), p.ate(), caminhaoId));
+        List<Viagem> canceladas = viagens.canceladasNoPeriodo(empresaId, p.de(), p.ate(), caminhaoId);
+        Map<Long, RentabilidadeResponse> calculosCanceladas = rentabilidade.calcular(empresaId, canceladas);
         List<TotalManutencao> manut = manutencoes.totaisPorCaminhao(empresaId, caminhaoId, p.de(), p.ate());
-        return montar(p, caminhaoId, base, base.lista(),
+        return montar(p, caminhaoId, base, base.lista(), canceladas, calculosCanceladas,
                 manut.stream().mapToLong(TotalManutencao::quantidade).sum(),
                 manut.stream().map(TotalManutencao::valor).reduce(ZERO, BigDecimal::add));
     }
@@ -98,10 +100,15 @@ public class IndicadorService {
         Base base = base(empresaId, viagens.finalizadasNoPeriodo(empresaId, p.de(), p.ate(), null));
         Map<Long, List<Viagem>> porCaminhao = base.lista().stream()
                 .collect(Collectors.groupingBy(v -> v.getCaminhao().getId()));
+        List<Viagem> canceladas = viagens.canceladasNoPeriodo(empresaId, p.de(), p.ate(), null);
+        Map<Long, RentabilidadeResponse> calculosCanceladas = rentabilidade.calcular(empresaId, canceladas);
+        Map<Long, List<Viagem>> canceladasPorCaminhao = canceladas.stream()
+                .collect(Collectors.groupingBy(v -> v.getCaminhao().getId()));
         Map<Long, TotalManutencao> manut = manutencoes.totaisPorCaminhao(empresaId, null, p.de(), p.ate()).stream()
                 .collect(Collectors.toMap(TotalManutencao::caminhaoId, Function.identity()));
 
         Set<Long> ids = new LinkedHashSet<>(porCaminhao.keySet());
+        ids.addAll(canceladasPorCaminhao.keySet());
         ids.addAll(manut.keySet());
         if (ids.isEmpty()) {
             return List.of();
@@ -112,6 +119,7 @@ public class IndicadorService {
                     TotalManutencao m = manut.get(c.getId());
                     return new IndicadoresCaminhaoResponse(c.getId(), c.getPlaca(), montar(p, c.getId(), base,
                             porCaminhao.getOrDefault(c.getId(), List.of()),
+                            canceladasPorCaminhao.getOrDefault(c.getId(), List.of()), calculosCanceladas,
                             m != null ? m.quantidade() : 0, m != null ? m.valor() : ZERO));
                 })
                 .toList();
@@ -166,7 +174,26 @@ public class IndicadorService {
     }
 
     private static IndicadoresResponse montar(Periodo p, Long caminhaoId, Base base, List<Viagem> lista,
+            List<Viagem> canceladas, Map<Long, RentabilidadeResponse> calculosCanceladas,
             long quantidadeManutencoes, BigDecimal custoManutencoes) {
+        // Canceladas: valores reais conhecidos, em bloco separado dos fretes concluídos.
+        BigDecimal receitaCanceladas = ZERO;
+        BigDecimal custoCanceladas = ZERO;
+        List<Long> canceladasIncompletas = new ArrayList<>();
+        for (Viagem v : canceladas) {
+            RentabilidadeResponse r = calculosCanceladas.get(v.getId());
+            if (r.receita() != null) {
+                receitaCanceladas = receitaCanceladas.add(r.receita());
+            }
+            custoCanceladas = custoCanceladas.add(nulo0(r.custoArla())).add(nulo0(r.pedagios()))
+                    .add(nulo0(r.despesasExtras())).add(nulo0(r.custoDieselVazio()))
+                    .add(nulo0(r.custoDieselCarregado()));
+            if (r.custoOperacionalTotal() == null) {
+                canceladasIncompletas.add(v.getId());
+            }
+        }
+        BigDecimal resultadoCanceladas = receitaCanceladas.subtract(custoCanceladas).setScale(2, RoundingMode.HALF_UP);
+
         List<RentabilidadeResponse> completas = new ArrayList<>();
         List<Long> incompletas = new ArrayList<>();
         BigDecimal freteIncompletas = ZERO;
@@ -227,7 +254,13 @@ public class IndicadorService {
                 dieselPago.subtract(dieselEstimado),
                 quantidadeManutencoes,
                 custoManutencoes.setScale(2, RoundingMode.HALF_UP),
-                lucro.subtract(custoManutencoes).setScale(2, RoundingMode.HALF_UP));
+                lucro.subtract(custoManutencoes).setScale(2, RoundingMode.HALF_UP),
+                canceladas.size(),
+                canceladasIncompletas,
+                receitaCanceladas.setScale(2, RoundingMode.HALF_UP),
+                custoCanceladas.setScale(2, RoundingMode.HALF_UP),
+                resultadoCanceladas,
+                lucro.add(resultadoCanceladas).subtract(custoManutencoes).setScale(2, RoundingMode.HALF_UP));
     }
 
     /** Duas casas, ou nulo quando não há base (divisor zero). */

@@ -13,8 +13,9 @@ import jakarta.validation.constraints.Size;
 /**
  * Cancela uma viagem em andamento. O motivo é obrigatório, em texto livre.
  *
- * dataFim fecha o período da viagem (padrão: hoje), liberando o caminhão para
- * a próxima. Os demais campos são opcionais: registram até onde a operação
+ * dataFim é a data do cancelamento (padrão: hoje): fecha o período da viagem,
+ * libera o caminhão para a próxima e define o mês em que os valores da
+ * viagem cancelada entram no financeiro. Os demais campos são opcionais: registram até onde a operação
  * chegou, para o custo do que foi rodado poder ser calculado. Valor recebido
  * e despesas usam os campos e lançamentos normais da viagem.
  */
