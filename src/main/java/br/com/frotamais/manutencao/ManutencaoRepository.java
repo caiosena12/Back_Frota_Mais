@@ -1,6 +1,5 @@
 package br.com.frotamais.manutencao;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -41,21 +40,6 @@ public interface ManutencaoRepository extends JpaRepository<Manutencao, Long> {
             @Param("ate") LocalDate ate,
             @Param("incluirExcluidas") boolean incluirExcluidas);
 
-    /** Soma das manutenções não excluídas no período (pela data), da empresa ou de um caminhão. */
-    @Query("""
-            select coalesce(sum(m.valor), 0) from Manutencao m
-            where m.empresa.id = :empresaId
-              and m.excluidaEm is null
-              and (:caminhaoId is null or m.caminhao.id = :caminhaoId)
-              and (cast(:de as date) is null or m.data >= :de)
-              and (cast(:ate as date) is null or m.data <= :ate)
-            """)
-    BigDecimal total(
-            @Param("empresaId") Long empresaId,
-            @Param("caminhaoId") Long caminhaoId,
-            @Param("de") LocalDate de,
-            @Param("ate") LocalDate ate);
-
     /** Totais por caminhão no período (só caminhões com manutenção). */
     @Query("""
             select new br.com.frotamais.manutencao.TotalManutencao(m.caminhao.id, count(m), sum(m.valor))
@@ -68,21 +52,6 @@ public interface ManutencaoRepository extends JpaRepository<Manutencao, Long> {
             group by m.caminhao.id
             """)
     List<TotalManutencao> totaisPorCaminhao(
-            @Param("empresaId") Long empresaId,
-            @Param("caminhaoId") Long caminhaoId,
-            @Param("de") LocalDate de,
-            @Param("ate") LocalDate ate);
-
-    /** Quantidade de manutenções não excluídas no período. */
-    @Query("""
-            select count(m) from Manutencao m
-            where m.empresa.id = :empresaId
-              and m.excluidaEm is null
-              and (:caminhaoId is null or m.caminhao.id = :caminhaoId)
-              and (cast(:de as date) is null or m.data >= :de)
-              and (cast(:ate as date) is null or m.data <= :ate)
-            """)
-    long quantidade(
             @Param("empresaId") Long empresaId,
             @Param("caminhaoId") Long caminhaoId,
             @Param("de") LocalDate de,
