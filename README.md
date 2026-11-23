@@ -166,6 +166,7 @@ A suíte nunca usa `frotamais`:
 
 - [`docs/API.md`](docs/API.md): endpoints, permissões e códigos de resposta.
 - [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md): migrations e adoção do Flyway em bancos existentes.
+- [`docs/AMBIENTE_INTEGRACAO_FRONTEND.md`](docs/AMBIENTE_INTEGRACAO_FRONTEND.md): como subir a API para o front-end (banco isolado, proxy do Angular, acesso no Codespaces); coleção em [`docs/frotamais-api.http`](docs/frotamais-api.http).
 - [`docs/CONTEXTO_FROTA_MAIS.md`](docs/CONTEXTO_FROTA_MAIS.md): contexto técnico, histórico, roadmap e pendências.
 
 ---

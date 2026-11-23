@@ -1,0 +1,357 @@
+# Coleção de requisições do Frota+ para a extensão REST Client (humao.rest-client),
+# já incluída no devcontainer. Clique em "Send Request" acima de cada bloco.
+#
+# - Não há tokens nem credenciais reais aqui. Os dados são fictícios.
+# - O token é lido da resposta do login/registro (variável {{token}}).
+# - Rode na ordem: registro (ou login) → caminhão → motorista → viagem → lançamentos.
+# - Ajuste os ids ({{caminhaoId}}, {{viagemId}}...) conforme as respostas.
+# - Contratos completos: docs/API.md. Ambiente: docs/AMBIENTE_INTEGRACAO_FRONTEND.md.
+
+@baseUrl = http://localhost:8080
+@email = dono.ficticio@exemplo.test
+@senha = SenhaFicticia123
+@token = {{login.response.body.token}}
+@caminhaoId = 1
+@motoristaId = 2
+@viagemId = 1
+@lancamentoId = 1
+@manutencaoId = 1
+
+### Sem token: deve responder 401 com {"status","erro","detalhes"}
+GET {{baseUrl}}/api/caminhoes
+
+############################################################
+# Autenticação e conta
+############################################################
+
+### Registro: cria a empresa e o DONO (201). E-mail único no sistema (409 se repetir).
+POST {{baseUrl}}/api/auth/registro
+Content-Type: application/json
+
+{
+  "nomeEmpresa": "Transportadora Fictícia",
+  "nome": "Dono Fictício",
+  "email": "{{email}}",
+  "senha": "{{senha}}"
+}
+
+### Login (200): {token, nome, perfil}
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "senha": "{{senha}}"
+}
+
+### Troca de senha (204)
+POST {{baseUrl}}/api/auth/senha
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "senhaAtual": "{{senha}}",
+  "novaSenha": "OutraSenha456"
+}
+
+### Ativação do convite do motorista (público). O token vem do link do e-mail.
+POST {{baseUrl}}/api/convites/ativacao
+Content-Type: application/json
+
+{
+  "token": "TOKEN_DO_LINK_DO_EMAIL",
+  "senha": "SenhaMotorista123"
+}
+
+############################################################
+# Caminhões
+############################################################
+
+### Listar (DONO: todos; MOTORISTA: só vinculados)
+GET {{baseUrl}}/api/caminhoes?incluirExcluidos=false
+Authorization: Bearer {{token}}
+
+### Detalhar
+GET {{baseUrl}}/api/caminhoes/{{caminhaoId}}
+Authorization: Bearer {{token}}
+
+### Cadastrar (DONO, 201)
+POST {{baseUrl}}/api/caminhoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "placa": "ABC1D23",
+  "marca": "Volvo",
+  "modelo": "FH 540",
+  "ano": 2022,
+  "eixos": 6,
+  "capacidadeTanqueLitros": 900
+}
+
+### Alterar (DONO). PUT é substituição integral; status obrigatório (ATIVO ou INATIVO).
+PUT {{baseUrl}}/api/caminhoes/{{caminhaoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "placa": "ABC1D23",
+  "marca": "Volvo",
+  "modelo": "FH 540",
+  "ano": 2022,
+  "eixos": 6,
+  "status": "ATIVO",
+  "capacidadeTanqueLitros": 900
+}
+
+### Excluir (DONO, 204, exclusão lógica)
+DELETE {{baseUrl}}/api/caminhoes/{{caminhaoId}}
+Authorization: Bearer {{token}}
+
+############################################################
+# Motoristas (só DONO)
+############################################################
+
+### Listar
+GET {{baseUrl}}/api/motoristas
+Authorization: Bearer {{token}}
+
+### Detalhar
+GET {{baseUrl}}/api/motoristas/{{motoristaId}}
+Authorization: Bearer {{token}}
+
+### Cadastrar e enviar convite (201). Sem SMTP configurado: 503 e nada é gravado.
+POST {{baseUrl}}/api/motoristas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Motorista Fictício",
+  "email": "motorista.ficticio@exemplo.test",
+  "caminhaoIds": [{{caminhaoId}}]
+}
+
+### Alterar nome e situação
+PUT {{baseUrl}}/api/motoristas/{{motoristaId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "nome": "Motorista Fictício",
+  "ativo": true
+}
+
+### Substituir vínculos com caminhões (lista completa; vazia remove todos)
+PUT {{baseUrl}}/api/motoristas/{{motoristaId}}/caminhoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "caminhaoIds": [{{caminhaoId}}]
+}
+
+### Reenviar convite (invalida o anterior)
+POST {{baseUrl}}/api/motoristas/{{motoristaId}}/convite
+Authorization: Bearer {{token}}
+
+### Cancelar convite pendente
+DELETE {{baseUrl}}/api/motoristas/{{motoristaId}}/convite
+Authorization: Bearer {{token}}
+
+############################################################
+# Viagens
+############################################################
+
+### Listar (filtros opcionais: status=EM_ANDAMENTO|FINALIZADA|CANCELADA, caminhaoId)
+GET {{baseUrl}}/api/viagens
+Authorization: Bearer {{token}}
+
+### Detalhar (DONO recebe a rentabilidade; MOTORISTA, nula)
+GET {{baseUrl}}/api/viagens/{{viagemId}}
+Authorization: Bearer {{token}}
+
+### Abrir viagem (201). Datas AAAA-MM-DD, nunca no futuro. Abastecimentos opcionais.
+POST {{baseUrl}}/api/viagens
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "caminhaoId": {{caminhaoId}},
+  "dataInicio": "2026-11-20",
+  "origem": "Campinas/SP",
+  "destino": "Curitiba/PR",
+  "valorFrete": 8500.00,
+  "kmInicialCarregado": 120000,
+  "consumoMedioCarregado": 2.50,
+  "abastecimentos": [
+    { "tipo": "DIESEL", "data": "2026-11-20", "hora": "07:30", "litros": 400, "valorTotal": 2400.00 }
+  ]
+}
+
+### Alterar (PUT integral, sem caminhaoId; dataFim/kmFinalCarregado só em encerrada)
+PUT {{baseUrl}}/api/viagens/{{viagemId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "dataInicio": "2026-11-20",
+  "origem": "Campinas/SP",
+  "destino": "Curitiba/PR",
+  "valorFrete": 8600.00,
+  "kmInicialCarregado": 120000,
+  "consumoMedioCarregado": 2.50,
+  "motoristaId": null
+}
+
+### Finalizar
+POST {{baseUrl}}/api/viagens/{{viagemId}}/finalizar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "dataFim": "2026-11-22",
+  "kmFinalCarregado": 120420
+}
+
+### Cancelar (só DONO, viagem em andamento; motivo obrigatório)
+POST {{baseUrl}}/api/viagens/{{viagemId}}/cancelar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "motivo": "Cliente desistiu do frete"
+}
+
+### Viagem histórica (só DONO): nasce finalizada
+POST {{baseUrl}}/api/viagens/historicas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "caminhaoId": {{caminhaoId}},
+  "dataInicio": "2026-10-01",
+  "dataFim": "2026-10-03",
+  "origem": "Santos/SP",
+  "destino": "Goiânia/GO",
+  "valorFrete": 9000.00,
+  "kmInicialCarregado": 110000,
+  "kmFinalCarregado": 110900,
+  "consumoMedioCarregado": 2.40,
+  "abastecimentos": [
+    { "tipo": "DIESEL", "data": "2026-10-01", "litros": 380, "valorTotal": 2280.00 }
+  ],
+  "pedagios": [ { "data": "2026-10-02", "valor": 310.50 } ],
+  "despesasExtras": [ { "descricao": "Alimentação", "data": "2026-10-02", "valor": 85.00 } ]
+}
+
+### Auditoria: alterações (só DONO)
+GET {{baseUrl}}/api/viagens/{{viagemId}}/alteracoes
+Authorization: Bearer {{token}}
+
+### Auditoria: fotografias anteriores (só DONO)
+GET {{baseUrl}}/api/viagens/{{viagemId}}/fotografias-anteriores
+Authorization: Bearer {{token}}
+
+### Indicadores (só DONO). Período: ano | ano+mes | semana | de+ate; caminhaoId opcional
+GET {{baseUrl}}/api/viagens/indicadores?ano=2026&mes=11
+Authorization: Bearer {{token}}
+
+### Indicadores por caminhão (só DONO)
+GET {{baseUrl}}/api/viagens/indicadores/por-caminhao?de=2026-10-01&ate=2026-11-30
+Authorization: Bearer {{token}}
+
+############################################################
+# Lançamentos da viagem (DONO e MOTORISTA vinculado)
+############################################################
+
+### Abastecimento: diesel
+POST {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "tipo": "DIESEL", "data": "2026-11-21", "hora": "14:10", "litros": 300, "valorTotal": 1830.00 }
+
+### Abastecimento: Arla
+POST {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "tipo": "ARLA", "data": "2026-11-21", "litros": 40, "valorTotal": 160.00 }
+
+### Corrigir abastecimento
+PUT {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos/{{lancamentoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "tipo": "DIESEL", "data": "2026-11-21", "hora": "14:10", "litros": 310, "valorTotal": 1891.00 }
+
+### Excluir abastecimento (só com a viagem em andamento)
+DELETE {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos/{{lancamentoId}}
+Authorization: Bearer {{token}}
+
+### Pedágio
+POST {{baseUrl}}/api/viagens/{{viagemId}}/pedagios
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "data": "2026-11-21", "valor": 145.80 }
+
+### Corrigir pedágio
+PUT {{baseUrl}}/api/viagens/{{viagemId}}/pedagios/{{lancamentoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "data": "2026-11-21", "valor": 150.00 }
+
+### Excluir pedágio
+DELETE {{baseUrl}}/api/viagens/{{viagemId}}/pedagios/{{lancamentoId}}
+Authorization: Bearer {{token}}
+
+### Despesa extra (descrição livre)
+POST {{baseUrl}}/api/viagens/{{viagemId}}/despesas-extras
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "descricao": "Lavagem", "data": "2026-11-21", "valor": 120.00 }
+
+### Corrigir despesa extra
+PUT {{baseUrl}}/api/viagens/{{viagemId}}/despesas-extras/{{lancamentoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "descricao": "Lavagem completa", "data": "2026-11-21", "valor": 150.00 }
+
+### Excluir despesa extra
+DELETE {{baseUrl}}/api/viagens/{{viagemId}}/despesas-extras/{{lancamentoId}}
+Authorization: Bearer {{token}}
+
+############################################################
+# Manutenções (só DONO)
+############################################################
+
+### Listar (filtros opcionais: caminhaoId, de, ate, incluirExcluidas)
+GET {{baseUrl}}/api/manutencoes?caminhaoId={{caminhaoId}}
+Authorization: Bearer {{token}}
+
+### Detalhar
+GET {{baseUrl}}/api/manutencoes/{{manutencaoId}}
+Authorization: Bearer {{token}}
+
+### Registrar
+POST {{baseUrl}}/api/manutencoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "caminhaoId": {{caminhaoId}}, "data": "2026-11-10", "descricao": "Troca de óleo", "valor": 950.00 }
+
+### Corrigir
+PUT {{baseUrl}}/api/manutencoes/{{manutencaoId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "caminhaoId": {{caminhaoId}}, "data": "2026-11-10", "descricao": "Troca de óleo e filtros", "valor": 1100.00 }
+
+### Excluir (204, exclusão lógica)
+DELETE {{baseUrl}}/api/manutencoes/{{manutencaoId}}
+Authorization: Bearer {{token}}
