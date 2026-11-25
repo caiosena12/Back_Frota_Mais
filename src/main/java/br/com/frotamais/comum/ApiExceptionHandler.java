@@ -8,6 +8,7 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -47,6 +48,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(RegraNegocioException.class)
     public ResponseEntity<RespostaErro> regraNegocio(RegraNegocioException ex) {
+        if (ex instanceof TentativasExcedidasException t) {
+            return ResponseEntity.status(t.getStatus())
+                    .header(HttpHeaders.RETRY_AFTER, String.valueOf(t.getSegundosParaLiberar()))
+                    .body(RespostaErro.de(t.getStatus(), List.of(t.getMessage())));
+        }
         return responder(ex.getStatus(), List.of(ex.getMessage()));
     }
 

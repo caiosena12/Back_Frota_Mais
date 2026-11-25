@@ -58,6 +58,7 @@ class ConfigCorsTest {
         assertEquals(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"), cfg.getAllowedMethods());
         assertEquals(List.of("Authorization", "Content-Type", "Accept"), cfg.getAllowedHeaders());
         assertFalse(cfg.getAllowCredentials());
+        assertEquals(List.of("Retry-After"), cfg.getExposedHeaders());
         assertFalse(cfg.getAllowedOrigins().contains("*"));
     }
 }
