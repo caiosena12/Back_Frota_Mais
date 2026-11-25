@@ -187,7 +187,7 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 
 | Recurso | Corpo | Regras |
 |---|---|---|
-| `abastecimentos` | `tipo` (`DIESEL` ou `ARLA`), `data`, `hora` (opcional), `litros`, `valorTotal` | Diesel com preço plausível e litros até a capacidade do tanque, se cadastrada |
+| `abastecimentos` | `tipo` (`DIESEL` ou `ARLA`), `data`, `quilometragem` (inteiro, km do odômetro, `0` a `9999999`), `litros`, `valorTotal` | Quilometragem obrigatória (só a correção de um abastecimento antigo, gravado sem ela, pode omitir). Diesel com preço plausível e litros até a capacidade do tanque, se cadastrada |
 | `pedagios` | `data`, `valor` | |
 | `despesas-extras` | `descricao` (livre), `data`, `valor` | Nenhuma palavra é bloqueada |
 
@@ -197,7 +197,7 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 - Pedágios e despesas ficam dentro do período da viagem.
 - Abastecimento também pode ser **anterior ao início**, se foi feito entre
   viagens: a partir do dia em que a viagem anterior do caminhão terminou. Ele
-  pertence à viagem seguinte, com data e hora reais. Sem viagem anterior
+  pertence à viagem seguinte, com a data e a quilometragem reais. Sem viagem anterior
   (primeiro frete do caminhão), qualquer data anterior ao início é aceita, sem
   limite de dias. A data nunca é ajustada para coincidir com o início.
 - A data final de uma viagem não pode passar dos abastecimentos antecipados

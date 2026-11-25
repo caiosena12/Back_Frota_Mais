@@ -1,7 +1,8 @@
 # Frota+: handoff do release para o front-end
 
-**Contratos: versão `1.1` (25/11/2026), congelados.** A `1.1` só **acrescenta**
-o `429` (seção 1.1); nada da `1.0` mudou. A partir daqui,
+**Contratos: versão `1.2` (25/11/2026), congelados.** A `1.1` só **acrescentou**
+o `429` (seção 1.1). A `1.2` troca o horário pela quilometragem no
+abastecimento (seção 1.2); é a única mudança incompatível desde a `1.0`. A partir daqui,
 qualquer mudança que afete o front-end (rota, método, campo, tipo, código de
 resposta ou permissão) precisa ser comunicada e registrada neste documento
 **antes** de ser publicada.
@@ -38,6 +39,20 @@ O navegador não entrega essa resposta ao JavaScript de qualquer forma.
 | Fluxo do convite, DTOs, JWT, perfis e datas | Sem mudança | — |
 
 Limites e detalhes em `docs/CONFIGURACAO_SMTP.md`, seção 5.
+
+### 1.2 Mudanças da versão 1.2 (branch `fix/lancamentos-quilometragem`)
+
+| Mudança | Tipo | Efeito no front-end |
+|---|---|---|
+| `AbastecimentoRequest`: sai `hora`, entra `quilometragem` (inteiro, km do odômetro, de `0` a `9999999`). Vale para `POST`/`PUT` de `/abastecimentos` e para as listas `abastecimentos` da abertura (`POST /api/viagens`) e da viagem histórica | **Incompatível** | Enviar `quilometragem` como número inteiro (sem pontos, vírgula ou aspas). Sem ela, `400` "Informe a quilometragem do caminhão no abastecimento (odômetro, em km)." Decimal, texto ou fora da faixa: `400` |
+| `hora` enviada no corpo | Ignorada | Não é mais gravada (resposta com `hora: null`) |
+| `AbastecimentoResponse`: entra `quilometragem` (inteiro ou `null`); `hora` continua, só leitura | Aditiva | Mostrar a quilometragem; `null` = abastecimento antigo, sem a informação ("não informada", nunca zero). `hora` só existe em registros antigos |
+| Correção (`PUT`) de abastecimento antigo, gravado sem quilometragem | Regra | Pode continuar sem ela (não é inventada). Depois de informada, não pode ser apagada (`400`) |
+| Auditoria de abastecimento corrigido | Campo | O campo `quilometragem` passa a aparecer em `alteracoes`; registros antigos podem ter `hora` |
+
+A quilometragem não entra em nenhum cálculo financeiro (a política continua
+`rentabilidade-v1`). Migration `V12__abastecimento_quilometragem.sql`: coluna
+nula nos registros antigos; a coluna `hora` foi mantida com os dados antigos.
 
 ## 2. Convenções
 
@@ -154,7 +169,7 @@ Indicadores aceitam um filtro de período: `ano`; `ano`+`mes`; `semana`
 | FinalizacaoRequest | `dataFim*`, `kmFinalCarregado*`, `consumoMedioVazio`, `consumoMedioCarregado` |
 | CancelamentoRequest | `motivo*`, `dataFim`, `kmFinalCarregado`, `consumoMedioVazio`, `consumoMedioCarregado` |
 | ViagemHistoricaRequest | `caminhaoId*`, `motoristaId`, `dataInicio*`, `dataFim*`, `origem*`, `destino*`, `valorFrete*`, `kmInicialVazio`, `kmInicialCarregado*`, `kmFinalCarregado*`, `consumoMedioVazio`, `consumoMedioCarregado*`, `abastecimentos`, `pedagios`, `despesasExtras` (até 200 cada) |
-| AbastecimentoRequest | `tipo*`, `data*`, `hora`, `litros*`, `valorTotal*` |
+| AbastecimentoRequest | `tipo*`, `data*`, `quilometragem*` (inteiro; só a correção de um registro antigo pode omitir), `litros*`, `valorTotal*` |
 | PedagioRequest | `data*`, `valor*` |
 | DespesaExtraRequest | `descricao*` (livre), `data*`, `valor*` |
 | ManutencaoRequest | `caminhaoId*`, `data*`, `descricao*`, `valor*` |
@@ -169,7 +184,7 @@ Indicadores aceitam um filtro de período: `ano`; `ano`+`mes`; `semana`
 | ViagemResumoResponse | `id`, `caminhaoId`, `placa`, `motoristaId`, `motoristaNome`, `status`, `origem`, `destino`, `dataInicio`, `dataFim`, `valorFrete`, `kmVazio`, `kmCarregado`, `custoOperacionalTotal`, `lucro`, `margemPercentual`, `calculoCompleto` |
 | ViagemResponse | `id`, `caminhaoId`, `placa`, `motoristaId`, `motoristaNome`, `status`, `origem`, `destino`, `dataInicio`, `dataFim`, `valorFrete`, `kmInicialVazio`, `kmFinalVazio`, `kmInicialCarregado`, `kmFinalCarregado`, `consumoMedioVazio`, `consumoMedioCarregado`, `criadaEm`, `atualizadaEm`, `finalizadaEm`, `cadastroRetroativoEm`, `canceladaEm`, `motivoCancelamento`, `abastecimentosDiesel[]`, `abastecimentosArla[]`, `pedagios[]`, `despesasExtras[]`, `rentabilidade` |
 | RentabilidadeResponse | `receita`, `kmVazio`, `kmCarregado`, `litrosEstimadosVazio`, `litrosEstimadosCarregado`, `precoMedioDiesel`, `origemPrecoDiesel`, `viagemReferenciaPrecoDieselId`, `referenciaPrecoConsolidadaEm`, `custoDieselVazio`, `custoDieselCarregado`, `custoArla`, `pedagios`, `despesasExtras`, `custoOperacionalTotal`, `lucro`, `margemPercentual`, `calculoCompleto`, `pendencias[]`, `politicaCalculo`, `resultadoConsolidadoEm` |
-| AbastecimentoResponse | `id`, `tipo`, `data`, `hora`, `litros`, `valorTotal` |
+| AbastecimentoResponse | `id`, `tipo`, `data`, `quilometragem` (`null` em registros antigos), `hora` (legado, só registros antigos), `litros`, `valorTotal` |
 | PedagioResponse | `id`, `data`, `valor` |
 | DespesaExtraResponse | `id`, `descricao`, `data`, `valor` |
 | AlteracaoViagemResponse | `id`, `alteradaEm`, `usuarioId`, `usuarioNome`, `perfil`, `entidade`, `registroId`, `campo`, `valorAnterior`, `valorNovo` |

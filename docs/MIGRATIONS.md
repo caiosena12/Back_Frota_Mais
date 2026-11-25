@@ -30,6 +30,7 @@ batem com o banco e **nunca altera o schema**.
 | V9 | `abastecimentos.hora` (opcional; registros antigos ficam sem hora). |
 | V10 | `manutencoes`. |
 | V11 | Auditoria: `perfil` (`DONO` ou `MOTORISTA`, com `CHECK`) em `viagem_alteracoes` e `viagem_fotografias_anteriores`; `viagem_fotografias_anteriores.resultado_novo` (a fotografia que substituiu a anterior). Registros antigos recebem `perfil = 'DONO'`, o único perfil que podia corrigir até a V10; `resultado_novo` fica nulo neles (não é reconstruído). |
+| V12 | `quilometragem INTEGER` em `abastecimentos` (nula nos registros antigos, com `CHECK` de 0 a 9.999.999). A coluna `hora` (V9) é mantida |
 
 Detalhes no comentário do topo de cada arquivo. Nenhuma versão apaga dados.
 
