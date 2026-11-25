@@ -75,6 +75,12 @@
       <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
     </dependency>
 
+    <!-- Health check para a hospedagem: só /actuator/health, sem detalhes -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
     <!-- Ferramentas de teste do Spring Security -->
     <dependency>
       <groupId>org.springframework.security</groupId>

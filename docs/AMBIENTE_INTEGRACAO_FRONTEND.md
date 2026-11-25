@@ -16,9 +16,9 @@ requisições está em [`frotamais-api.http`](frotamais-api.http).
 | Perfil Spring | `dev` |
 | URL local | `http://localhost:8080` |
 | Prefixo das rotas | `/api` |
-| Health check | Não há (sem Actuator). Use `GET /api/caminhoes` sem token: a resposta esperada é `401` com JSON |
+| Health check | `GET /actuator/health` → `{"status":"UP"}` (desde o release de produção) |
 | Autenticação | `Authorization: Bearer <token>` (JWT obtido no login, no registro ou na ativação do convite) |
-| CORS | **Não configurado.** Use o proxy do Angular (seção 6) |
+| CORS | Desligado na integração (`CORS_ORIGENS_PERMITIDAS` vazia): use o proxy do Angular (seção 6). Em produção, restrito à origem do front-end |
 
 Bancos que **não** devem ser usados para integração: `frotamais` (banco de
 desenvolvimento persistente, ainda sem o Flyway adotado; a API se recusa a subir
@@ -173,7 +173,12 @@ URL encaminhada da porta `4200` (aba **Ports** do VS Code).
 
 ### CORS
 
-O back-end **não** tem CORS configurado. Conferido em 23/11/2026:
+> Atualização (25/11/2026): o back-end agora tem CORS configurável por
+> `CORS_ORIGENS_PERMITIDAS` (origens exatas, nunca `*`). No ambiente de
+> integração a variável fica vazia e vale o texto abaixo; em produção, ver
+> `docs/DEPLOYMENT_PRODUCTION.md`.
+
+Sem origens configuradas, o comportamento é o conferido em 23/11/2026:
 
 - requisição repassada pelo proxy (mesmo com cabeçalho `Origin`): `200`,
   funciona;
@@ -332,8 +337,8 @@ dica visual.
 
 ## 11. Limitações conhecidas
 
-- **Sem health check** dedicado (sem Actuator).
-- **Sem CORS**: use o proxy (seção 6).
+- **Health check:** `GET /actuator/health`.
+- **CORS** desligado neste ambiente: use o proxy (seção 6).
 - **E-mail real não configurado**: fora da captura local (seção 9), convites
   respondem `503`. A rota da página de ativação do front-end ainda precisa ser
   informada ao back-end para compor o link (`CONVITE_URL_ATIVACAO`).
