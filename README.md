@@ -83,11 +83,14 @@ O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o 
 | `CONVITE_URL_ATIVACAO` | Endereço da tela de ativação; o token vai como parâmetro | vazio (e-mail desligado) |
 | `CONVITE_VALIDADE_HORAS` | Validade do convite (1 a 720) | `24` |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | Servidor SMTP | vazio |
+| `EMAIL_CAPTURA_LOCAL`, `EMAIL_CAPTURA_DIR` | Só perfil `dev`: grava os e-mails em `contexto-local/emails-dev` em vez de enviar | desligada |
 | `JPA_SHOW_SQL` | Mostra o SQL no log | `false` |
 
 - **Perfil `dev`** (`application-dev.properties`): conecta ao `frotamais` local com as credenciais do dev container. Nunca use em produção.
 - **Sem perfil** (produção): nenhuma credencial tem valor padrão.
 - **E-mail:** sem SMTP, remetente e URL de ativação, as operações que enviam convite respondem `503` e não gravam nada. Nenhum serviço de e-mail vem configurado.
+- **Captura local de e-mails** (só desenvolvimento): com o perfil `dev` e `EMAIL_CAPTURA_LOCAL=true`, os convites viram arquivos privados em `contexto-local/emails-dev/` e nada é enviado. Fora do `dev` ou junto com SMTP, a API não sobe. Detalhes em [`docs/AMBIENTE_INTEGRACAO_FRONTEND.md`](docs/AMBIENTE_INTEGRACAO_FRONTEND.md).
+- **Mensagens de validação:** em português, centralizadas em `ValidationMessages.properties`.
 
 ## ▶️ Como executar
 

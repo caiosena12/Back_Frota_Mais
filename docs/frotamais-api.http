@@ -121,7 +121,8 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/motoristas/{{motoristaId}}
 Authorization: Bearer {{token}}
 
-### Cadastrar e enviar convite (201). Sem SMTP configurado: 503 e nada é gravado.
+### Cadastrar e enviar convite (201). Sem SMTP nem captura local: 503 e nada é gravado.
+# Com a captura local (perfil dev), use só e-mails fictícios (.test, example.com...).
 POST {{baseUrl}}/api/motoristas
 Authorization: Bearer {{token}}
 Content-Type: application/json
