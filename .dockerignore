@@ -1,0 +1,16 @@
+# Nada privado nem gerado entra no contexto do build da imagem.
+contexto-local/
+.frotamais-jwt.env
+.backup-auth-frotamais/
+*.env
+.env*
+.git/
+.github/
+.devcontainer/
+.vscode/
+.idea/
+target/
+docs/
+scripts/
+*.sh
+HELP.md

@@ -38,3 +38,8 @@ build/
 
 # Contexto privado do projeto (nunca publicar)
 contexto-local/
+
+# Variaveis reais de ambiente (o modelo versionado e o .env.example)
+.env
+*.env
+!.env.example
