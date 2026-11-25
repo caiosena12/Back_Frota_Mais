@@ -17,7 +17,7 @@ Este repositório contém a **API REST do back-end**. O front-end em Angular ain
 | Registro de empresa com o primeiro usuário DONO; login com JWT | Front-end em Angular |
 | Perfis DONO e MOTORISTA, com isolamento por empresa | Dashboards e relatórios visuais, exportação |
 | Caminhões com marca, eixos, inativação e exclusão lógica | Rate limit em login, registro e ativação |
-| Motoristas por convite de e-mail (24 h, reenvio e cancelamento), com vínculo aos caminhões | CORS (depende da estratégia do Angular) |
+| Motoristas por convite de e-mail (24 h, reenvio e cancelamento), com vínculo aos caminhões | Publicação em produção (hospedagem, banco e SMTP a definir: [`docs/DEPLOYMENT_PRODUCTION.md`](docs/DEPLOYMENT_PRODUCTION.md)) |
 | Viagens: abertura (com abastecimentos anteriores), finalização, cancelamento, viagem histórica, motorista responsável | |
 | Abastecimentos de diesel e Arla (inclusive entre viagens e antes do primeiro frete), pedágios e despesas extras | |
 | Rentabilidade por frete, com fotografia financeira e auditoria das correções | |
@@ -78,7 +78,9 @@ O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o 
 | `JWT_SECRET` | Chave do JWT (Base64, ≥ 32 bytes) | nenhum: obrigatória |
 | `JWT_HORAS` | Validade do token | `8` |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | Conexão com o PostgreSQL | obrigatórias, exceto no perfil `dev` |
-| `SPRING_PROFILES_ACTIVE` | `dev` para desenvolvimento local | o `run-dev-frotamais.sh` usa `dev` |
+| `SPRING_PROFILES_ACTIVE` | `dev` para desenvolvimento local; `prod` em produção | o `run-dev-frotamais.sh` usa `dev` |
+| `CORS_ORIGENS_PERMITIDAS` | Origens exatas do front-end, separadas por vírgula (nunca `*`) | vazio (nenhuma); obrigatória e só https no `prod` |
+| `PORT` | Porta HTTP no perfil `prod` | `8080` |
 | `EMAIL_REMETENTE` | Remetente dos convites | vazio (e-mail desligado) |
 | `CONVITE_URL_ATIVACAO` | Endereço da tela de ativação; o token vai como parâmetro | vazio (e-mail desligado) |
 | `CONVITE_VALIDADE_HORAS` | Validade do convite (1 a 720) | `24` |
@@ -87,7 +89,8 @@ O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o 
 | `JPA_SHOW_SQL` | Mostra o SQL no log | `false` |
 
 - **Perfil `dev`** (`application-dev.properties`): conecta ao `frotamais` local com as credenciais do dev container. Nunca use em produção.
-- **Sem perfil** (produção): nenhuma credencial tem valor padrão.
+- **Perfil `prod`** (`application-prod.properties`): produção. Recusa subir com banco de teste, de integração ou descartável, sem CORS https ou junto com o `dev`. Health check público em `GET /actuator/health` (só o status). Deploy, Dockerfile e variáveis: [`docs/DEPLOYMENT_PRODUCTION.md`](docs/DEPLOYMENT_PRODUCTION.md); contratos congelados: [`docs/RELEASE_HANDOFF.md`](docs/RELEASE_HANDOFF.md).
+- **Sem perfil:** nenhuma credencial tem valor padrão (use `prod` em produção).
 - **E-mail:** sem SMTP, remetente e URL de ativação, as operações que enviam convite respondem `503` e não gravam nada. Nenhum serviço de e-mail vem configurado.
 - **Captura local de e-mails** (só desenvolvimento): com o perfil `dev` e `EMAIL_CAPTURA_LOCAL=true`, os convites viram arquivos privados em `contexto-local/emails-dev/` e nada é enviado. Fora do `dev` ou junto com SMTP, a API não sobe. Detalhes em [`docs/AMBIENTE_INTEGRACAO_FRONTEND.md`](docs/AMBIENTE_INTEGRACAO_FRONTEND.md).
 - **Mensagens de validação:** em português, centralizadas em `ValidationMessages.properties`.

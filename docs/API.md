@@ -6,6 +6,12 @@ testes em `src/test/java` comprovam cada regra com tokens reais.
 ## Convenções
 
 - **Base:** `http://localhost:8080` no desenvolvimento. JSON em UTF-8.
+- **CORS:** só as origens exatas de `CORS_ORIGENS_PERMITIDAS` (métodos `GET`,
+  `POST`, `PUT`, `DELETE`; cabeçalhos `Authorization`, `Content-Type`,
+  `Accept`; sem cookies). Outra origem: `403` no preflight, em texto simples,
+  gerado pelo filtro de CORS.
+- **Health check:** `GET /actuator/health` (público) → `{"status":"UP"}`, sem
+  detalhes; também `/actuator/health/liveness` e `/readiness`.
 - **Autenticação:** `Authorization: Bearer <token>`, obtido no registro, no
   login ou na ativação do convite. A cada requisição o usuário é recarregado do
   banco: precisa estar ativo, e a empresa do token precisa ser a dele. O perfil

@@ -87,7 +87,9 @@ Invariantes que não podem ser quebrados:
 
 **Testes:** `jwt()` do `spring-security-test` contorna o `conversor()`. Um teste com ele prova o `@PreAuthorize`, não o fluxo real.
 
-**Lacunas conhecidas:** não há rate limit em login, registro e ativação; CORS não configurado (depende do Angular); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
+**Produção:** perfil `prod` (`application-prod.properties`), com `seguranca/GuardaProducao` (recusa banco de teste/integração/descartável e CORS ausente, antes do Flyway), CORS por `CORS_ORIGENS_PERMITIDAS` (`seguranca/ConfigCors`) e `GET /actuator/health` público, sem detalhes. Deploy em `docs/DEPLOYMENT_PRODUCTION.md`; contratos congelados em `docs/RELEASE_HANDOFF.md`.
+
+**Lacunas conhecidas:** não há rate limit em login, registro e ativação; a API ainda não foi publicada (hospedagem, banco de produção, SMTP e URL do front-end a definir); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
 
 ## Modo de trabalho
 
