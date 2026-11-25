@@ -50,8 +50,8 @@ public class LancamentoService {
 
     public AbastecimentoResponse adicionarAbastecimento(Long viagemId, AbastecimentoRequest req) {
         Viagem v = viagemParaIncluir(viagemId, null, true);
-        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
-        validarAbastecimento(v, req);
+        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data());
+        validarAbastecimento(v, req, true);
         Abastecimento a = new Abastecimento();
         a.setViagem(v);
         a.setCriadoPor(usuarios.getReferenceById(logado.usuarioId()));
@@ -64,9 +64,10 @@ public class LancamentoService {
 
     public AbastecimentoResponse atualizarAbastecimento(Long viagemId, Long id, AbastecimentoRequest req) {
         Viagem v = viagemParaLancar(viagemId, null, true);
-        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data(), req.hora());
-        validarAbastecimento(v, req);
         Abastecimento a = abastecimento(v, id);
+        viagens.validarDataAbastecimento(v, logado.empresaId(), req.data());
+        // Só um abastecimento antigo, gravado sem quilometragem, pode continuar sem ela.
+        validarAbastecimento(v, req, a.getQuilometragem() != null);
         boolean envolveDiesel = a.getTipo() == TipoCombustivel.DIESEL || req.tipo() == TipoCombustivel.DIESEL;
         Map<String, String> antes = AuditoriaViagem.campos(a);
         preencher(a, req);
@@ -200,8 +201,8 @@ public class LancamentoService {
     }
 
     /** Ver RegrasLancamento.validarAbastecimento. */
-    private void validarAbastecimento(Viagem v, AbastecimentoRequest req) {
-        RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, politica.limites());
+    private void validarAbastecimento(Viagem v, AbastecimentoRequest req, boolean quilometragemObrigatoria) {
+        RegrasLancamento.validarAbastecimento(v.getCaminhao(), req, politica.limites(), quilometragemObrigatoria);
     }
 
     /** Correção de pedágio ou despesa de frete encerrado: regrava a fotografia só dele, com o mesmo preço. */
@@ -249,7 +250,7 @@ public class LancamentoService {
     private static void preencher(Abastecimento a, AbastecimentoRequest req) {
         a.setTipo(req.tipo());
         a.setData(req.data());
-        a.setHora(req.hora());
+        a.setQuilometragem(req.quilometragem());
         a.setLitros(req.litros());
         a.setValorTotal(req.valorTotal());
     }

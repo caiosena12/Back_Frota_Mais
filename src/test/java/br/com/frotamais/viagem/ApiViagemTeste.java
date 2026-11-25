@@ -106,13 +106,13 @@ public abstract class ApiViagemTeste {
     protected JsonNode diesel(String token, long viagemId, String data, String litros, String valor)
             throws Exception {
         return chamar(post(VIAGENS + "/" + viagemId + "/abastecimentos"), token,
-                corpo("tipo", "DIESEL", "data", data, "litros", litros, "valorTotal", valor), 201);
+                corpo("tipo", "DIESEL", "data", data, "quilometragem", 150000, "litros", litros, "valorTotal", valor), 201);
     }
 
     protected JsonNode arla(String token, long viagemId, String data, String litros, String valor)
             throws Exception {
         return chamar(post(VIAGENS + "/" + viagemId + "/abastecimentos"), token,
-                corpo("tipo", "ARLA", "data", data, "litros", litros, "valorTotal", valor), 201);
+                corpo("tipo", "ARLA", "data", data, "quilometragem", 150000, "litros", litros, "valorTotal", valor), 201);
     }
 
     protected JsonNode pedagio(String token, long viagemId, String data, String valor) throws Exception {

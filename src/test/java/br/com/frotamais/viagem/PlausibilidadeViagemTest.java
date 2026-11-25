@@ -43,7 +43,7 @@ class PlausibilidadeViagemTest extends ApiViagemTeste {
 
     private JsonNode abastecer(long viagem, String tipo, String litros, String valor, int status) throws Exception {
         return chamar(POST(VIAGENS + "/" + viagem + "/abastecimentos"), token,
-                corpo("tipo", tipo, "data", "2025-03-01", "litros", litros, "valorTotal", valor), status);
+                corpo("tipo", tipo, "data", "2025-03-01", "quilometragem", 150000, "litros", litros, "valorTotal", valor), status);
     }
 
     @Test
@@ -60,7 +60,7 @@ class PlausibilidadeViagemTest extends ApiViagemTeste {
         // A correção (PUT) também é validada.
         long ab = abastecer(id, "DIESEL", "100", "600.00", 201).get("id").asLong();
         chamar(PUT(VIAGENS + "/" + id + "/abastecimentos/" + ab), token, corpo("tipo", "DIESEL",
-                "data", "2025-03-01", "litros", "600", "valorTotal", "100.00"), 400);   // litros e valor trocados
+                "data", "2025-03-01", "quilometragem", 150000, "litros", "600", "valorTotal", "100.00"), 400);   // litros e valor trocados
 
         // Arla não segue a faixa de preço do diesel.
         abastecer(id, "ARLA", "100", "50.00", 201);

@@ -46,12 +46,12 @@ class IsolamentoEmpresaViagemTest extends ApiViagemTeste {
 
         // Lançar, corrigir e excluir lançamentos na viagem de A.
         chamar(POST(urlA + "/abastecimentos"), tokenB, corpo("tipo", "DIESEL", "data", "2025-06-01",
-                "litros", "1", "valorTotal", "1.00"), 404);
+                "quilometragem", 150000, "litros", "1", "valorTotal", "1.00"), 404);
         chamar(POST(urlA + "/pedagios"), tokenB, corpo("data", "2025-06-01", "valor", "1.00"), 404);
         chamar(POST(urlA + "/despesas-extras"), tokenB, corpo("descricao", "x", "data", "2025-06-01",
                 "valor", "1.00"), 404);
         chamar(PUT(urlA + "/abastecimentos/" + dieselA), tokenB, corpo("tipo", "DIESEL",
-                "data", "2025-06-01", "litros", "1", "valorTotal", "1.00"), 404);
+                "data", "2025-06-01", "quilometragem", 150000, "litros", "1", "valorTotal", "1.00"), 404);
         chamar(PUT(urlA + "/pedagios/" + pedagioA), tokenB, corpo("data", "2025-06-01", "valor", "1.00"), 404);
         chamar(PUT(urlA + "/despesas-extras/" + extraA), tokenB, corpo("descricao", "x",
                 "data", "2025-06-01", "valor", "1.00"), 404);
@@ -64,7 +64,7 @@ class IsolamentoEmpresaViagemTest extends ApiViagemTeste {
                 "kmInicialVazio", 0));
         String urlB = VIAGENS + "/" + viagemB;
         chamar(PUT(urlB + "/abastecimentos/" + dieselA), tokenB, corpo("tipo", "DIESEL",
-                "data", "2025-06-01", "litros", "1", "valorTotal", "1.00"), 404);
+                "data", "2025-06-01", "quilometragem", 150000, "litros", "1", "valorTotal", "1.00"), 404);
         chamar(PUT(urlB + "/pedagios/" + pedagioA), tokenB, corpo("data", "2025-06-01", "valor", "1.00"), 404);
         chamar(DELETE(urlB + "/despesas-extras/" + extraA), tokenB, null, 404);
 

@@ -3,10 +3,8 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.LocalDate;
-import java.time.LocalTime;
 
 import br.com.frotamais.caminhao.Caminhao;
-import br.com.frotamais.comum.Datas;
 import br.com.frotamais.comum.RegraNegocioException;
 
 /**
@@ -15,6 +13,9 @@ import br.com.frotamais.comum.RegraNegocioException;
  * histórica. Funções puras: recebem tudo o que precisam.
  */
 final class RegrasLancamento {
+
+    static final String QUILOMETRAGEM_OBRIGATORIA =
+            "Informe a quilometragem do caminhão no abastecimento (odômetro, em km).";
 
     private RegrasLancamento() {
     }
@@ -47,10 +48,7 @@ final class RegrasLancamento {
      * dias: todo abastecimento feito fora de uma viagem pertence à seguinte.
      */
     static void validarDataAbastecimento(LocalDate inicio, LocalDate fim, LocalDate fimAnterior,
-            LocalDate data, LocalTime hora) {
-        if (hora != null && data.equals(ViagemService.hoje()) && hora.isAfter(LocalTime.now(Datas.FUSO))) {
-            throw RegraNegocioException.invalido("O horário do abastecimento não pode estar no futuro.");
-        }
+            LocalDate data) {
         if (!data.isBefore(inicio)) {
             validarData(inicio, fim, data);
             return;
@@ -62,6 +60,11 @@ final class RegrasLancamento {
     }
 
     /**
+     * Quilometragem: obrigatória quando quilometragemObrigatoria (todo
+     * abastecimento novo e a correção de um que já a tem). Só a correção de um
+     * abastecimento antigo, gravado sem ela, pode continuar sem: o valor não é
+     * conhecido e não é inventado. Faixa (0 a 9.999.999) garantida no request.
+     *
      * Diesel: preço por litro dentro dos limites de plausibilidade e, se o
      * caminhão tiver capacidade do tanque cadastrada, litros até essa capacidade.
      * Sem capacidade cadastrada não há limite de litros.
@@ -71,7 +74,11 @@ final class RegrasLancamento {
      * diesel não se aplica a ele; o caminhão não tem campo de capacidade do
      * tanque de Arla.
      */
-    static void validarAbastecimento(Caminhao caminhao, AbastecimentoRequest req, LimitesPlausibilidade limites) {
+    static void validarAbastecimento(Caminhao caminhao, AbastecimentoRequest req, LimitesPlausibilidade limites,
+            boolean quilometragemObrigatoria) {
+        if (quilometragemObrigatoria && req.quilometragem() == null) {
+            throw RegraNegocioException.invalido(QUILOMETRAGEM_OBRIGATORIA);
+        }
         if (req.tipo() != TipoCombustivel.DIESEL) {
             return;
         }

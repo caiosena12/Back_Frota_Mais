@@ -47,8 +47,17 @@ public class Abastecimento {
     @Column(nullable = false)
     private LocalDate data;
 
-    /** Hora local real do abastecimento (opcional; registros antigos não têm). */
+    /**
+     * Hora local real do abastecimento. Legado (V9): não é mais recebida no
+     * cadastro; fica só nos registros antigos que a informaram.
+     */
     private LocalTime hora;
+
+    /**
+     * Quilometragem (odômetro) do caminhão no abastecimento. Obrigatória nos
+     * abastecimentos novos; nula nos antigos, em que não é conhecida (V12).
+     */
+    private Integer quilometragem;
 
     @Column(nullable = false, precision = 10, scale = 3)
     private BigDecimal litros;
@@ -71,7 +80,8 @@ public class Abastecimento {
     public LocalDate getData() { return data; }
     public void setData(LocalDate data) { this.data = data; }
     public LocalTime getHora() { return hora; }
-    public void setHora(LocalTime hora) { this.hora = hora; }
+    public Integer getQuilometragem() { return quilometragem; }
+    public void setQuilometragem(Integer quilometragem) { this.quilometragem = quilometragem; }
     public BigDecimal getLitros() { return litros; }
     public void setLitros(BigDecimal litros) { this.litros = litros; }
     public BigDecimal getValorTotal() { return valorTotal; }

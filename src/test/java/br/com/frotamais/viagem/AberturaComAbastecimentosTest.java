@@ -29,7 +29,7 @@ class AberturaComAbastecimentosTest extends ApiViagemTeste {
     }
 
     private static Map<String, Object> diesel(String data, String litros, String valor) {
-        return corpo("tipo", "DIESEL", "data", data, "litros", litros, "valorTotal", valor);
+        return corpo("tipo", "DIESEL", "data", data, "quilometragem", 150000, "litros", litros, "valorTotal", valor);
     }
 
     private Map<String, Object> abertura(String inicio, List<?> abastecimentos) {
@@ -45,12 +45,12 @@ class AberturaComAbastecimentosTest extends ApiViagemTeste {
     void primeiroFreteAbreComAbastecimentosAnterioresSemLimiteDeDias() throws Exception {
         JsonNode v = chamar(POST(VIAGENS), dono, abertura("2025-06-10", List.of(
                 diesel("2025-01-05", "200", "1200.00"),
-                corpo("tipo", "ARLA", "data", "2025-06-09", "hora", "18:40", "litros", "20", "valorTotal", "70.00"),
+                corpo("tipo", "ARLA", "data", "2025-06-09", "quilometragem", 152430, "litros", "20", "valorTotal", "70.00"),
                 diesel("2025-06-10", "100", "700.00"))), 201);
         JsonNode dieselLista = v.get("abastecimentosDiesel");
         assertEquals(2, dieselLista.size());
         assertEquals("2025-01-05", dieselLista.get(0).get("data").asString());
-        assertEquals("18:40:00", v.get("abastecimentosArla").get(0).get("hora").asString());
+        assertEquals(152430, v.get("abastecimentosArla").get(0).get("quilometragem").asInt());
         assertEquals("2025-06-10", v.get("dataInicio").asString());
 
         // Compõem o preço médio desta viagem: (1200 + 700) / 300 l.

@@ -114,7 +114,7 @@ class MensagensValidacaoTest extends ApiViagemTeste {
         String token = registrar().token();
         long caminhao = criarCaminhao(token);
         List<Map<String, Object>> muitos = new ArrayList<>(Collections.nCopies(201,
-                corpo("tipo", "ARLA", "data", HOJE, "litros", "10", "valorTotal", "40")));
+                corpo("tipo", "ARLA", "data", HOJE, "quilometragem", 150000, "litros", "10", "valorTotal", "40")));
         Map<String, Object> v = corpo("caminhaoId", caminhao, "dataInicio", null,
                 "valorFrete", "100.123", "kmInicialCarregado", -1, "consumoMedioCarregado", "0",
                 "abastecimentos", muitos);
@@ -131,7 +131,7 @@ class MensagensValidacaoTest extends ApiViagemTeste {
         String token = registrar().token();
         long caminhao = criarCaminhao(token);
         Map<String, Object> v = corpo("caminhaoId", caminhao, "dataInicio", HOJE, "kmInicialCarregado", 1000,
-                "abastecimentos", List.of(corpo("tipo", "DIESEL", "data", HOJE, "litros", null, "valorTotal", "0")));
+                "abastecimentos", List.of(corpo("tipo", "DIESEL", "data", HOJE, "quilometragem", 150000, "litros", null, "valorTotal", "0")));
         List<String> d = detalhes400(chamar(POST(VIAGENS), token, v, 400));
         contemExato(d, "abastecimentos[0].litros: é obrigatório");
         contemExato(d, "abastecimentos[0].valorTotal: deve ser maior que zero");

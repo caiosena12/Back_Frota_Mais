@@ -97,7 +97,7 @@ public class AuditoriaViagem {
         Map<String, String> c = new LinkedHashMap<>();
         c.put("tipo", texto(a.getTipo()));
         c.put("data", texto(a.getData()));
-        c.put("hora", texto(a.getHora()));
+        c.put("quilometragem", texto(a.getQuilometragem()));
         c.put("litros", texto(a.getLitros()));
         c.put("valorTotal", texto(a.getValorTotal()));
         return c;

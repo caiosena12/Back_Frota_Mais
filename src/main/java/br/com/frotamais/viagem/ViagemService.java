@@ -3,7 +3,6 @@ package br.com.frotamais.viagem;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -142,8 +141,8 @@ public class ViagemService {
         // um item inválido não deixar nada criado pela metade.
         LocalDate fimAnterior = fimDaAnterior(empresaId, caminhao.getId(), estado.dataInicio(), null);
         for (AbastecimentoRequest a : req.abastecimentosOuVazio()) {
-            RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), null, fimAnterior, a.data(), a.hora());
-            RegrasLancamento.validarAbastecimento(caminhao, a, politica.limites());
+            RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), null, fimAnterior, a.data());
+            RegrasLancamento.validarAbastecimento(caminhao, a, politica.limites(), true);
         }
 
         Viagem v = nova(empresaId, caminhao);
@@ -181,8 +180,8 @@ public class ViagemService {
         LocalDate fimAnterior = fimDaAnterior(empresaId, caminhao.getId(), estado.dataInicio(), null);
         for (AbastecimentoRequest a : req.abastecimentosOuVazio()) {
             RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), estado.dataFim(), fimAnterior,
-                    a.data(), a.hora());
-            RegrasLancamento.validarAbastecimento(caminhao, a, limites);
+                    a.data());
+            RegrasLancamento.validarAbastecimento(caminhao, a, limites, true);
         }
         for (PedagioRequest p : req.pedagiosOuVazio()) {
             RegrasLancamento.validarData(estado.dataInicio(), estado.dataFim(), p.data());
@@ -224,7 +223,7 @@ public class ViagemService {
         a.setCriadoPor(autor);
         a.setTipo(item.tipo());
         a.setData(item.data());
-        a.setHora(item.hora());
+        a.setQuilometragem(item.quilometragem());
         a.setLitros(item.litros());
         a.setValorTotal(item.valorTotal());
         return a;
@@ -595,7 +594,7 @@ public class ViagemService {
             LocalDate fimAnterior = fimDaAnterior(empresaId, v.getCaminhao().getId(), estado.dataInicio(), v.getId());
             for (Abastecimento a : lista) {
                 RegrasLancamento.validarDataAbastecimento(estado.dataInicio(), estado.dataFim(), fimAnterior,
-                        a.getData(), null);
+                        a.getData());
             }
         }
     }
@@ -606,11 +605,11 @@ public class ViagemService {
     }
 
     /** Data de um abastecimento novo ou corrigido da viagem (usado por LancamentoService). */
-    void validarDataAbastecimento(Viagem v, Long empresaId, LocalDate data, LocalTime hora) {
+    void validarDataAbastecimento(Viagem v, Long empresaId, LocalDate data) {
         LocalDate fimAnterior = data.isBefore(v.getDataInicio())
                 ? fimDaAnterior(empresaId, v.getCaminhao().getId(), v.getDataInicio(), v.getId())
                 : null;
-        RegrasLancamento.validarDataAbastecimento(v.getDataInicio(), v.getDataFim(), fimAnterior, data, hora);
+        RegrasLancamento.validarDataAbastecimento(v.getDataInicio(), v.getDataFim(), fimAnterior, data);
     }
 
     /**

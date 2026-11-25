@@ -127,7 +127,7 @@ class AuditoriaCorrecaoTest extends ApiViagemTeste {
         finalizarViagem();
         chamar(PUT(url + "/pedagios/" + pedagioId), dono, corpo("data", "2025-06-02", "valor", "12.50"), 200);
         chamar(PUT(url + "/abastecimentos/" + dieselId), dono, corpo("tipo", "DIESEL", "data", "2025-06-01",
-                "litros", "100", "valorTotal", "650.00"), 200);
+                "quilometragem", 150000, "litros", "100", "valorTotal", "650.00"), 200);
         chamar(PUT(url + "/despesas-extras/" + extraId), dono, corpo("descricao", "Chapa e lona",
                 "data", "2025-06-02", "valor", "50.00"), 200);
 

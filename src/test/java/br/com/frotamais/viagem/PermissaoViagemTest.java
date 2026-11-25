@@ -46,7 +46,7 @@ class PermissaoViagemTest extends ApiViagemTeste {
         finalizar(token, viagem, corpo("dataFim", "2025-06-01", "kmFinalCarregado", 10,
                 "consumoMedioCarregado", "2.50"), 404);
         chamar(POST(url + "/abastecimentos"), token, corpo("tipo", "DIESEL", "data", "2025-06-01",
-                "litros", "1", "valorTotal", "1.00"), 404);
+                "quilometragem", 150000, "litros", "1", "valorTotal", "1.00"), 404);
         chamar(POST(url + "/pedagios"), token, corpo("data", "2025-06-01", "valor", "1.00"), 404);
         chamar(PUT(url + "/pedagios/" + pedagio), token, corpo("data", "2025-06-01", "valor", "1.00"), 404);
         chamar(DELETE(url + "/pedagios/" + pedagio), token, null, 404);
