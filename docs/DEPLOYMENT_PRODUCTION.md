@@ -33,7 +33,10 @@ Cadastre-as no painel de segredos da hospedagem, nunca em arquivo versionado.
 | `PORT` | não | Porta HTTP (padrão 8080); muitas hospedagens definem sozinhas |
 | `JWT_HORAS` | não | 1 a 24 (padrão 8) |
 | `EMAIL_REMETENTE`, `CONVITE_URL_ATIVACAO`, `CONVITE_VALIDADE_HORAS` | para convites | Sem eles, os convites respondem `503` |
-| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE` | para convites | SMTP |
+| `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH`, `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE` | para convites | SMTP: guia e provedores em [`CONFIGURACAO_SMTP.md`](CONFIGURACAO_SMTP.md) |
+| `SMTP_TIMEOUT_MS` | não | Timeout do SMTP (padrão 10000) |
+| `FORWARD_HEADERS_STRATEGY` | não | `native` (padrão no prod): IP real pelo `X-Forwarded-For` só de proxies confiáveis. `none` sem proxy |
+| `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` | depende da hospedagem | Regex dos IPs do proxy, se ele não vier de rede privada |
 
 **Nunca em produção:** `EMAIL_CAPTURA_LOCAL` e `EMAIL_CAPTURA_DIR`. A
 propriedade só existe no perfil `dev`; em `prod` são ignoradas (ensaio de
@@ -140,6 +143,9 @@ gravado:
 | CORS: origem autorizada / outra origem | `200` com `Access-Control-Allow-Origin` / `403` |
 | `/actuator/env` com token | `404` |
 | Recusas da guarda: banco descartável, CORS vazio, `http`, `*`, com caminho | não sobe e **não migra** (banco continua com 0 tabelas) |
+| Limite de tentativas desligado (`APP_TENTATIVAS_ATIVO=false`) | não sobe |
+| `EMAIL_CAPTURA_LOCAL=true` no prod | ignorada: "Envio de e-mail não configurado" |
+| 30 logins com `X-Forwarded-For` forjado e variando no prefixo | todos contados para o mesmo IP real; o 31º recebe `429`; outro cliente real segue livre |
 | Sem `JWT_SECRET` | não sobe |
 
 Bancos criados para o ensaio (vazios ou só com a conta fictícia; podem ser
@@ -154,7 +160,7 @@ removidos com autorização): `frotamais_ensaio_prod`,
 | 2 | **PostgreSQL de produção** exclusivo, com backup | Responsável | Pode ser o banco gerenciado do mesmo provedor. Confira a retenção e a expiração do plano gratuito |
 | 3 | **URL definitiva do front-end** | Equipe do front-end | Vai em `CORS_ORIGENS_PERMITIDAS` e define `CONVITE_URL_ATIVACAO` |
 | 4 | **SMTP** e remetente | Responsável | Sem ele, o fluxo de motorista (convite → ativação → login) não funciona: `503` |
-| 5 | **Rate limit** em login, registro e ativação | Responsável | Não implementado. Recomendação: no gateway ou WAF da hospedagem, se houver. Ver seção 9 |
+| 5 | **Rate limit** | — | Implementado na aplicação (em memória, por instância). Na hospedagem: conferir de onde vem o proxy (`SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES`) e usar o rate limit/WAF dela com mais de uma instância |
 | 6 | **Domínio próprio** (opcional) | Responsável | A URL padrão do provedor, com HTTPS, atende |
 
 Com 1 e 2 disponíveis, o deploy leva: criar o serviço a partir do repositório
@@ -165,9 +171,9 @@ Com 1 e 2 disponíveis, o deploy leva: criar o serviço a partir do repositório
 
 | Risco | Situação | Mitigação |
 |---|---|---|
-| Sem rate limit em login, registro e ativação | **Aberto** | Senha com política mínima, BCrypt (custo 10) e token de convite com 256 bits. Antes de exposição prolongada: limitar no gateway |
+| Força bruta em login, registro e ativação | **Mitigado** | Limite por IP e por e-mail (`429`); IP real só de proxies confiáveis. Limitação: memória da instância (reinício zera; várias instâncias contam separado); ataques distribuídos exigem WAF da hospedagem |
 | Enumeração de e-mail no registro (`409 E-mail já cadastrado`) | Aceito | É o contrato atual; mudar exige alinhamento |
-| Diferença de tempo no login (BCrypt só roda se o e-mail existe) | **Aberto**, baixo | Correção proposta: comparar com um hash fictício quando o e-mail não existe. Muda autenticação, então aguarda aprovação |
+| Diferença de tempo no login | **Corrigido** | Uma verificação BCrypt em todas as falhas (hash fictício quando não há senha) e a mesma resposta `401` (`LoginEnumeracaoTest`) |
 | Token sem revogação (JWT sem estado) | Aceito | Validade de 8 h; usuário desativado perde o acesso na hora (checagem no banco) |
 | LGPD (dados pessoais e financeiros) | Pendente | Avaliar antes de uso com dados reais |
 

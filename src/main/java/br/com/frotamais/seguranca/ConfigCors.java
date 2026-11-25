@@ -91,6 +91,8 @@ final class ConfigCors {
             cfg.setAllowedOrigins(origens);
             cfg.setAllowedMethods(METODOS);
             cfg.setAllowedHeaders(CABECALHOS);
+            // O front-end lê o Retry-After do 429 (limite de tentativas).
+            cfg.setExposedHeaders(List.of("Retry-After"));
             cfg.setAllowCredentials(false);
             cfg.setMaxAge(CACHE_PREFLIGHT_SEGUNDOS);
             fonte.registerCorsConfiguration("/**", cfg);

@@ -30,6 +30,7 @@ public record RespostaErro(int status, String erro, List<String> detalhes) {
             case METHOD_NOT_ALLOWED -> "Método não permitido";
             case CONFLICT -> "Conflito de dados";
             case UNSUPPORTED_MEDIA_TYPE -> "Formato não suportado";
+            case TOO_MANY_REQUESTS -> "Muitas tentativas";
             case SERVICE_UNAVAILABLE -> "Serviço indisponível";
             case INTERNAL_SERVER_ERROR -> "Erro interno";
             default -> status.getReasonPhrase();

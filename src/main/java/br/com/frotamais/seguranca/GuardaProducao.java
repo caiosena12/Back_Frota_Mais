@@ -20,7 +20,8 @@ import org.springframework.stereotype.Component;
  * - banco de teste, de integração ou descartável (pelo nome do banco na
  *   DB_URL), para que a produção nunca grave nesses bancos.
  *
- * - CORS_ORIGENS_PERMITIDAS ausente, sem https ou com curinga (ConfigCors).
+ * - CORS_ORIGENS_PERMITIDAS ausente, sem https ou com curinga (ConfigCors);
+ * - limite de tentativas desligado (app.tentativas.ativo=false).
  *
  * DB_URL, DB_USER, DB_PASSWORD e JWT_SECRET sem valor já impedem a subida.
  * Nada de valores sensíveis no log: só o nome do banco.
@@ -39,8 +40,12 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
     static final List<String> BANCOS_PROIBIDOS = List.of("test", "integracao", "descartavel");
 
     GuardaProducao(Environment ambiente, @Value("${spring.datasource.url:}") String url,
-            @Value("${app.cors.origens-permitidas:}") String origensCors) {
+            @Value("${app.cors.origens-permitidas:}") String origensCors,
+            @Value("${app.tentativas.ativo:true}") boolean limiteTentativas) {
         String banco = validar(ambiente.acceptsProfiles(Profiles.of("dev")), url);
+        if (!limiteTentativas) {
+            throw new IllegalStateException("O limite de tentativas (app.tentativas.ativo) não pode ser desligado no perfil prod.");
+        }
         int origens = ConfigCors.origens(origensCors, true).size();
         log.info("Perfil prod ativo; banco '{}'; {} origem(ns) CORS.", banco, origens);
     }

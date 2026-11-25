@@ -89,7 +89,9 @@ Invariantes que não podem ser quebrados:
 
 **Produção:** perfil `prod` (`application-prod.properties`), com `seguranca/GuardaProducao` (recusa banco de teste/integração/descartável e CORS ausente, antes do Flyway), CORS por `CORS_ORIGENS_PERMITIDAS` (`seguranca/ConfigCors`) e `GET /actuator/health` público, sem detalhes. Deploy em `docs/DEPLOYMENT_PRODUCTION.md`; contratos congelados em `docs/RELEASE_HANDOFF.md`.
 
-**Lacunas conhecidas:** não há rate limit em login, registro e ativação; a API ainda não foi publicada (hospedagem, banco de produção, SMTP e URL do front-end a definir); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
+**Limite de tentativas:** `seguranca/LimitesTentativas` (por IP no `LimiteTentativasInterceptor`, por e-mail nas falhas do login), em memória; desligado na suíte (`app.tentativas.ativo=false` em `src/test/resources/config`) e ligado com limites pequenos nos testes dele. O login confere a senha contra um hash fictício quando não há senha, para não revelar contas pelo tempo. Detalhes em `docs/CONFIGURACAO_SMTP.md`.
+
+**Lacunas conhecidas:** o limite de tentativas é por instância (memória); a API ainda não foi publicada (hospedagem, banco de produção, SMTP e URL do front-end a definir); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
 
 ## Modo de trabalho
 
