@@ -86,6 +86,8 @@ O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o 
 | `CONVITE_VALIDADE_HORAS` | Validade do convite (1 a 720) | `24` |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME`, `SPRING_MAIL_PASSWORD` | Servidor SMTP | vazio |
 | `EMAIL_CAPTURA_LOCAL`, `EMAIL_CAPTURA_DIR` | Só perfil `dev`: grava os e-mails em `contexto-local/emails-dev` em vez de enviar | desligada |
+| `SMTP_TIMEOUT_MS` | Timeout de conexão, leitura e escrita do SMTP | `10000` |
+| `FORWARD_HEADERS_STRATEGY`, `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` | Só `prod`: IP real atrás do proxy da hospedagem (limite de tentativas) | `native` e redes privadas |
 | `JPA_SHOW_SQL` | Mostra o SQL no log | `false` |
 
 - **Perfil `dev`** (`application-dev.properties`): conecta ao `frotamais` local com as credenciais do dev container. Nunca use em produção.
@@ -94,6 +96,7 @@ O schema é versionado pelo **Flyway** (`src/main/resources/db/migration`), e o 
 - **E-mail:** sem SMTP, remetente e URL de ativação, as operações que enviam convite respondem `503` e não gravam nada. Nenhum serviço de e-mail vem configurado.
 - **Captura local de e-mails** (só desenvolvimento): com o perfil `dev` e `EMAIL_CAPTURA_LOCAL=true`, os convites viram arquivos privados em `contexto-local/emails-dev/` e nada é enviado. Fora do `dev` ou junto com SMTP, a API não sobe. Detalhes em [`docs/AMBIENTE_INTEGRACAO_FRONTEND.md`](docs/AMBIENTE_INTEGRACAO_FRONTEND.md).
 - **Mensagens de validação:** em português, centralizadas em `ValidationMessages.properties`.
+- **Limite de tentativas** em login, registro e ativação (`429` com `Retry-After`) e login sem diferença de resposta ou de tempo entre e-mail inexistente e senha errada. SMTP, provedores e teste do fluxo de motorista: [`docs/CONFIGURACAO_SMTP.md`](docs/CONFIGURACAO_SMTP.md).
 
 ## ▶️ Como executar
 

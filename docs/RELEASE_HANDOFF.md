@@ -1,6 +1,7 @@
 # Frota+: handoff do release para o front-end
 
-**Contratos: versão `1.0`, congelados em 25/11/2026.** A partir daqui,
+**Contratos: versão `1.1` (25/11/2026), congelados.** A `1.1` só **acrescenta**
+o `429` (seção 1.1); nada da `1.0` mudou. A partir daqui,
 qualquer mudança que afete o front-end (rota, método, campo, tipo, código de
 resposta ou permissão) precisa ser comunicada e registrada neste documento
 **antes** de ser publicada.
@@ -27,6 +28,16 @@ que o front-end já testou contra a API real continua valendo. Novidades:
 O `403` de CORS (origem não autorizada) é gerado pelo filtro de CORS do Spring
 **antes** da API: corpo em texto simples, não no formato `{"status","erro","detalhes"}`.
 O navegador não entrega essa resposta ao JavaScript de qualquer forma.
+
+### 1.1 Mudanças da versão 1.1 (branch `fix/pendencias-producao`)
+
+| Mudança | Tipo | Efeito no front-end |
+|---|---|---|
+| `429 Muitas tentativas` em `POST /api/auth/login`, `/api/auth/registro` e `/api/convites/ativacao`, com cabeçalho `Retry-After` (segundos), exposto no CORS | Aditiva | Mostrar `detalhes[0]` e não repetir a tentativa antes do `Retry-After`. O corpo segue `{status, erro, detalhes}` |
+| Login: todas as falhas respondem o mesmo `401` `E-mail ou senha inválidos.` | Sem mudança | Já era a mensagem; agora também em tempo equivalente |
+| Fluxo do convite, DTOs, JWT, perfis e datas | Sem mudança | — |
+
+Limites e detalhes em `docs/CONFIGURACAO_SMTP.md`, seção 5.
 
 ## 2. Convenções
 
@@ -62,6 +73,7 @@ Corpo único: `{"status": 409, "erro": "Conflito de dados", "detalhes": ["..."]}
 | `404` | Inexistente **ou de outra empresa**; motorista sem vínculo com o caminhão |
 | `405` / `415` | Método ou `Content-Type` não suportados |
 | `409` | Conflito com o estado atual |
+| `429` | Limite de tentativas em login, registro ou ativação. Cabeçalho `Retry-After` (segundos) |
 | `503` | E-mail não configurado no servidor (convites). Nada é gravado |
 | `500` | Erro inesperado, com mensagem genérica |
 
@@ -188,5 +200,5 @@ ABASTECIMENTO, PEDAGIO, DESPESA_EXTRA.
 | Dependência | Situação |
 |---|---|
 | PostgreSQL de produção (16) | **Pendente**: banco exclusivo a provisionar |
-| SMTP | **Pendente**: sem ele, cadastro e reenvio de convite de motorista respondem `503` |
+| SMTP | **Pendente** (credenciais): sem ele, cadastro e reenvio de convite respondem `503`. Guia e provedores: `docs/CONFIGURACAO_SMTP.md`. Em desenvolvimento, o fluxo completo funciona com a captura local |
 | Hospedagem com HTTPS | **Pendente**: provedor não definido |

@@ -42,6 +42,7 @@ Todas as respostas de erro, inclusive `401` e `403`, têm o mesmo corpo:
 | `404` | Recurso inexistente ou de outra empresa; rota inexistente |
 | `405` / `415` | Método ou `Content-Type` não suportados |
 | `409` | Conflito com o estado atual (duplicidade, viagem encerrada, sobreposição de períodos, caminhão excluído...) |
+| `429` | Muitas tentativas em login, registro ou ativação de convite; cabeçalho `Retry-After` com os segundos até liberar. Mesma resposta exista ou não o e-mail |
 | `503` | Envio de e-mail indisponível (SMTP não configurado, ou captura local de desenvolvimento com destinatário não fictício); nada é gravado |
 | `500` | Erro inesperado: mensagem genérica; a causa fica só no log do servidor |
 
@@ -60,6 +61,11 @@ nem do servidor: as mensagens ficam centralizadas em
 | `POST /api/auth/senha` | autenticado | `senhaAtual`, `novaSenha` | `204` |
 | `POST /api/convites/ativacao` | público | `token` (do e-mail), `senha` | `200` `{token, nome, perfil}`: ativa o motorista |
 
+- Login recusado: sempre `401` `E-mail ou senha inválidos.`, seja e-mail
+  inexistente, senha errada, conta inativa ou convite não aceito.
+- Limites (padrão): login 30 por IP a cada 5 min e 10 falhas por e-mail a cada
+  15 min (zeradas no login certo); registro 10 por IP por hora; ativação 20 por
+  IP a cada 15 min. Acima disso: `429` com `Retry-After`.
 - Senha: de 8 caracteres a 72 bytes, com pelo menos uma letra e um número.
 - E-mail único em todo o sistema (`409` no registro ou cadastro duplicado).
 - Convite: token aleatório guardado só como hash, uso único, validade de
