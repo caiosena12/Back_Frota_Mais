@@ -36,8 +36,14 @@ Todas as respostas de erro, inclusive `401` e `403`, têm o mesmo corpo:
 | `404` | Recurso inexistente ou de outra empresa; rota inexistente |
 | `405` / `415` | Método ou `Content-Type` não suportados |
 | `409` | Conflito com o estado atual (duplicidade, viagem encerrada, sobreposição de períodos, caminhão excluído...) |
-| `503` | Envio de e-mail indisponível (SMTP não configurado); nada é gravado |
+| `503` | Envio de e-mail indisponível (SMTP não configurado, ou captura local de desenvolvimento com destinatário não fictício); nada é gravado |
 | `500` | Erro inesperado: mensagem genérica; a causa fica só no log do servidor |
+
+Os `detalhes` estão sempre em português. Erros de validação vêm como
+`campo: mensagem` (ex.: `eixos: deve ser maior ou igual a 1`,
+`abastecimentos[0].litros: é obrigatório`), sem depender do idioma do cliente
+nem do servidor: as mensagens ficam centralizadas em
+`src/main/resources/ValidationMessages.properties`.
 
 ## Autenticação e conta
 

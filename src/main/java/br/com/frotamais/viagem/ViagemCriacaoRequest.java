@@ -39,7 +39,7 @@ public record ViagemCriacaoRequest(
          * transação da viagem. Opcional. Os feitos depois usam o endpoint de
          * abastecimentos da viagem.
          */
-        @Size(max = 200) List<@NotNull @Valid AbastecimentoRequest> abastecimentos) {
+        @Size(max = 200, message = "{frotamais.validacao.lista.tamanho}") List<@NotNull @Valid AbastecimentoRequest> abastecimentos) {
 
     List<AbastecimentoRequest> abastecimentosOuVazio() {
         return abastecimentos == null ? List.of() : abastecimentos;

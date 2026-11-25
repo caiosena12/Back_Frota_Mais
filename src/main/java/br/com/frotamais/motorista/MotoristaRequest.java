@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Size;
 public record MotoristaRequest(
         @NotBlank @Size(max = 120) String nome,
         @NotBlank @Email @Size(max = 160) String email,
-        @Size(max = 500) List<@NotNull Long> caminhaoIds) {
+        @Size(max = 500, message = "{frotamais.validacao.lista.tamanho}") List<@NotNull Long> caminhaoIds) {
 
     List<Long> caminhaoIdsOuVazio() {
         return caminhaoIds == null ? List.of() : caminhaoIds;
