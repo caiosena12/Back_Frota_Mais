@@ -37,9 +37,9 @@ public record ViagemHistoricaRequest(
         @NotNull @PositiveOrZero @Max(9_999_999) Integer kmFinalCarregado,
         @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioVazio,
         @NotNull @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 2, fraction = 2) BigDecimal consumoMedioCarregado,
-        @Size(max = 200) List<@NotNull @Valid AbastecimentoRequest> abastecimentos,
-        @Size(max = 200) List<@NotNull @Valid PedagioRequest> pedagios,
-        @Size(max = 200) List<@NotNull @Valid DespesaExtraRequest> despesasExtras) {
+        @Size(max = 200, message = "{frotamais.validacao.lista.tamanho}") List<@NotNull @Valid AbastecimentoRequest> abastecimentos,
+        @Size(max = 200, message = "{frotamais.validacao.lista.tamanho}") List<@NotNull @Valid PedagioRequest> pedagios,
+        @Size(max = 200, message = "{frotamais.validacao.lista.tamanho}") List<@NotNull @Valid DespesaExtraRequest> despesasExtras) {
 
     List<AbastecimentoRequest> abastecimentosOuVazio() {
         return abastecimentos == null ? List.of() : abastecimentos;
