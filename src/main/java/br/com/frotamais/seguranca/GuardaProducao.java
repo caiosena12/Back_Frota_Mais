@@ -11,10 +11,13 @@ import java.util.regex.Pattern;
 import javax.sql.DataSource;
 
 import org.slf4j.Logger;
+import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
+import org.springframework.boot.flyway.autoconfigure.FlywayMigrationStrategy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
@@ -42,13 +45,19 @@ import org.springframework.stereotype.Component;
  * DB_URL, DB_USER, DB_PASSWORD e JWT_SECRET sem valor já impedem a subida.
  * Nada de valores sensíveis no log: só o nome do banco.
  *
- * É um FlywayConfigurationCustomizer de propósito: o Flyway só é montado
- * depois que esta guarda foi criada (e validou), então nenhuma migration roda
- * num banco proibido antes de a aplicação parar.
+ * O Flyway usa só a conexão validada:
+ * - conexão própria do Flyway (SPRING_FLYWAY_URL, _USER, _PASSWORD,
+ *   _DRIVER_CLASS_NAME) é recusada antes de qualquer conexão;
+ * - como FlywayConfigurationCustomizer, a guarda é criada (e valida) antes de
+ *   o Flyway ser montado, e confere a conexão que ele recebeu;
+ * - como FlywayMigrationStrategy, confere de novo imediatamente antes do
+ *   migrate: o DataSource do Flyway tem de ser o mesmo objeto validado e o
+ *   PostgreSQL tem de confirmar o banco autorizado. Sem isso, nenhuma
+ *   migration roda e a aplicação não sobe.
  */
 @Component
 @Profile("prod")
-class GuardaProducao implements FlywayConfigurationCustomizer {
+class GuardaProducao implements FlywayConfigurationCustomizer, FlywayMigrationStrategy {
 
     private static final Logger log = LoggerFactory.getLogger(GuardaProducao.class);
 
@@ -56,6 +65,13 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
     static final List<String> MARCADORES_NAO_PRODUTIVOS = List.of("test", "integracao", "descartavel", "dev",
             "local", "missao", "ensaio", "copia", "homolog", "staging", "sandbox", "demo", "exemplo", "tmp",
             "temp", "backup", "bkp");
+
+    /**
+     * Siglas curtas demais para buscar como trecho ("qa" aparece dentro de
+     * outras palavras): só valem como termo próprio, separado por _ ou -,
+     * com número opcional (frotamais_qa, qa_frotamais, frotamais-hml, frotamais_qa2).
+     */
+    private static final Pattern TERMOS_NAO_PRODUTIVOS = Pattern.compile("(?:^|[_-])(?:qa|hml)\\d*(?:$|[_-])");
 
     /** O banco de desenvolvimento do Codespaces. */
     static final String BANCO_DESENVOLVIMENTO = "frotamais";
@@ -68,6 +84,19 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
 
     private static final String PREFIXO = "jdbc:postgresql://";
 
+    /**
+     * Propriedades com que o Spring Boot montaria uma conexão própria para o
+     * Flyway, fora da DB_URL validada (SPRING_FLYWAY_URL e afins, em qualquer
+     * grafia aceita pelo Binder).
+     */
+    static final List<String> CONEXAO_PROPRIA_DO_FLYWAY = List.of("spring.flyway.url", "spring.flyway.user",
+            "spring.flyway.password", "spring.flyway.driver-class-name");
+
+    /** O DataSource validado: o único que o Flyway pode usar. */
+    private final DataSource dataSource;
+
+    private final String banco;
+
     GuardaProducao(Environment ambiente, DataSource dataSource,
             @Value("${spring.datasource.url:}") String url,
             @Value("${app.producao.banco-autorizado:}") String bancoAutorizado,
@@ -78,13 +107,51 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
             throw new IllegalStateException("O limite de tentativas (app.tentativas.ativo) não pode ser desligado no perfil prod.");
         }
         int origens = ConfigCors.origens(origensCors, true).size();
+        exigirFlywaySemConexaoPropria(ambiente);
         confirmarBancoConectado(dataSource, banco);
+        this.dataSource = dataSource;
+        this.banco = banco;
         log.info("Perfil prod ativo; banco '{}'; {} origem(ns) CORS.", banco, origens);
     }
 
+    /** Primeira barreira: confere a conexão logo que o Flyway é montado. */
     @Override
     public void customize(FluentConfiguration configuracao) {
-        // A validação já ocorreu no construtor; nada a ajustar no Flyway.
+        exigirConexaoValidada(configuracao.getDataSource());
+    }
+
+    /**
+     * Barreira final, imediatamente antes do migrate: a configuração do Flyway
+     * já está completa, então um customizer que rodasse depois deste não escapa.
+     */
+    @Override
+    public void migrate(Flyway flyway) {
+        exigirConexaoValidada(flyway.getConfiguration().getDataSource());
+        flyway.migrate();
+    }
+
+    /**
+     * O Flyway só pode usar o próprio DataSource validado (o mesmo objeto) e o
+     * PostgreSQL tem de confirmar de novo o banco autorizado. Cobre
+     * {@code @FlywayDataSource}, FlywayConnectionDetails e customizers que
+     * troquem a conexão: qualquer outro DataSource é recusado sem ser aberto.
+     */
+    void exigirConexaoValidada(DataSource doFlyway) {
+        if (doFlyway != dataSource) {
+            throw new IllegalStateException("O Flyway recebeu uma conexão diferente da validada pela DB_URL:"
+                    + " no perfil prod, as migrations só rodam no banco autorizado em DB_NOME_PRODUCAO.");
+        }
+        confirmarBancoConectado(doFlyway, banco);
+    }
+
+    static void exigirFlywaySemConexaoPropria(Environment ambiente) {
+        Binder binder = Binder.get(ambiente);
+        for (String propriedade : CONEXAO_PROPRIA_DO_FLYWAY) {
+            if (binder.bind(propriedade, String.class).isBound()) {
+                throw new IllegalStateException("O perfil prod não aceita conexão própria do Flyway ('" + propriedade
+                        + "', ex.: SPRING_FLYWAY_URL): as migrations usam só a DB_URL validada.");
+            }
+        }
     }
 
     static String validar(boolean perfilDev, String url, String bancoAutorizado) {
@@ -112,7 +179,7 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
         }
         if (naoProdutivo(bancoAutorizado)) {
             throw new IllegalStateException("DB_NOME_PRODUCAO não pode indicar o banco '" + bancoAutorizado
-                    + "' (desenvolvimento, teste, integração, ensaio ou descartável).");
+                    + "' (desenvolvimento, teste, QA, homologação, integração, ensaio ou descartável).");
         }
         return bancoAutorizado;
     }
@@ -120,7 +187,8 @@ class GuardaProducao implements FlywayConfigurationCustomizer {
     static boolean naoProdutivo(String banco) {
         String minusculo = banco.toLowerCase(Locale.ROOT);
         return minusculo.equals(BANCO_DESENVOLVIMENTO)
-                || MARCADORES_NAO_PRODUTIVOS.stream().anyMatch(minusculo::contains);
+                || MARCADORES_NAO_PRODUTIVOS.stream().anyMatch(minusculo::contains)
+                || TERMOS_NAO_PRODUTIVOS.matcher(minusculo).find();
     }
 
     /** jdbc:postgresql://host:porta/banco?params → banco. */

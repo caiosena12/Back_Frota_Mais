@@ -17,7 +17,7 @@ Como publicar a API com segurança. Os contratos estão em
 | `.dockerignore` | Impede que `contexto-local/`, `.frotamais-jwt.env`, `.backup-auth-frotamais/` e `*.env` entrem na imagem |
 | `.env.example` | Nomes das variáveis, todas com valores **fictícios** |
 | `application-prod.properties` | Perfil de produção, sem nenhum segredo |
-| `seguranca/GuardaProducao` | Fail-closed: o perfil `prod` só sobe no banco autorizado em `DB_NOME_PRODUCAO` (nunca de desenvolvimento, teste, integração ou ensaio), confirmado pelo próprio PostgreSQL; também exige CORS https e recusa o `dev` junto. Age **antes** do Flyway |
+| `seguranca/GuardaProducao` | Fail-closed: o perfil `prod` só sobe no banco autorizado em `DB_NOME_PRODUCAO` (nunca de desenvolvimento, teste, QA, homologação, integração ou ensaio), confirmado pelo próprio PostgreSQL; também exige CORS https e recusa o `dev` junto. Age **antes** do Flyway, e o Flyway só migra pela mesma conexão validada (seção 4) |
 
 ## 2. Variáveis de ambiente (só os nomes)
 
@@ -27,7 +27,7 @@ Cadastre-as no painel de segredos da hospedagem, nunca em arquivo versionado.
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | sim | `prod` (o Dockerfile já define) |
 | `DB_URL` | sim | `jdbc:postgresql://host:5432/banco?sslmode=require`; banco **exclusivo** de produção, com o nome exatamente igual a `DB_NOME_PRODUCAO`, em minúsculas, sem `%` e sem parâmetros `PGDBNAME`, `PGHOST`, `PGPORT`, `service` ou `dbname` |
-| `DB_NOME_PRODUCAO` | sim | Nome do banco de produção autorizado (letras minúsculas, números e `_`). Não pode ser `frotamais` nem conter `test`, `dev`, `local`, `integracao`, `missao`, `ensaio`, `copia`, `homolog`, `staging`, `sandbox`, `demo`, `exemplo`, `tmp`, `temp`, `backup`, `bkp` ou `descartavel`. **Sem ele o `prod` não sobe**; ainda não há banco de produção contratado |
+| `DB_NOME_PRODUCAO` | sim | Nome do banco de produção autorizado (letras minúsculas, números e `_`). Não pode ser `frotamais` nem conter `test`, `dev`, `local`, `integracao`, `missao`, `ensaio`, `copia`, `homolog`, `staging`, `sandbox`, `demo`, `exemplo`, `tmp`, `temp`, `backup`, `bkp` ou `descartavel`, nem ter `qa` ou `hml` como termo próprio (`frotamais_qa`, `qa_frotamais`, `frotamais_hml2`; `frotamais_iqaluit` não conta). **Sem ele o `prod` não sobe**; ainda não há banco de produção contratado |
 | `DB_USER`, `DB_PASSWORD` | sim | Usuário próprio da aplicação, não o superusuário |
 | `JWT_SECRET` | sim | Base64 de ≥ 32 bytes, **novo** (nunca o de desenvolvimento): `openssl rand -base64 48` |
 | `CORS_ORIGENS_PERMITIDAS` | sim | Origem https exata do front-end; várias separadas por vírgula; nunca `*` |
@@ -78,7 +78,22 @@ check: `GET /actuator/health`.
    erro (ver `docs/MIGRATIONS.md`).
 5. Conferência depois da subida (somente leitura):
    `select version, success from flyway_schema_history order by installed_rank;`
-   Espera-se 1 a 11, todas `t`.
+   Espera-se 1 a 12, todas `t`.
+6. **Uma conexão só para a aplicação e para o Flyway: a `DB_URL`.** No `prod`,
+   a guarda recusa qualquer conexão própria do Flyway: `SPRING_FLYWAY_URL`,
+   `SPRING_FLYWAY_USER`, `SPRING_FLYWAY_PASSWORD` e
+   `SPRING_FLYWAY_DRIVER_CLASS_NAME`, ou as mesmas propriedades
+   `spring.flyway.*`, mesmo vazias ou iguais à `DB_URL`. Imediatamente antes do
+   `migrate`, ela confere ainda que o Flyway recebeu o **mesmo** `DataSource`
+   validado e que o `current_database()` continua sendo o autorizado. Assim, um
+   `@FlywayDataSource`, um `FlywayConnectionDetails` ou um customizer que troque
+   a conexão também param a subida, sem migrar nada.
+   - Motivo: até 26/11/2026, `SPRING_FLYWAY_URL` fazia o Flyway migrar outro
+     banco depois de a guarda aprovar a `DB_URL`. O problema foi reproduzido
+     com o jar real e corrigido.
+   - Testes: `GuardaProducaoTest`. Cenários com `DataSource` simulado, que
+     provam que a conexão alternativa nunca é aberta. A barreira final é
+     verificada por mutação.
 
 ## 5. Health check e logs
 
