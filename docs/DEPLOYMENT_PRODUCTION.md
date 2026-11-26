@@ -17,7 +17,7 @@ Como publicar a API com segurança. Os contratos estão em
 | `.dockerignore` | Impede que `contexto-local/`, `.frotamais-jwt.env`, `.backup-auth-frotamais/` e `*.env` entrem na imagem |
 | `.env.example` | Nomes das variáveis, todas com valores **fictícios** |
 | `application-prod.properties` | Perfil de produção, sem nenhum segredo |
-| `seguranca/GuardaProducao` | Impede o perfil `prod` de subir com banco de teste ou integração, sem CORS https ou junto com o `dev`. Age **antes** do Flyway |
+| `seguranca/GuardaProducao` | Fail-closed: o perfil `prod` só sobe no banco autorizado em `DB_NOME_PRODUCAO` (nunca de desenvolvimento, teste, integração ou ensaio), confirmado pelo próprio PostgreSQL; também exige CORS https e recusa o `dev` junto. Age **antes** do Flyway |
 
 ## 2. Variáveis de ambiente (só os nomes)
 
@@ -26,7 +26,8 @@ Cadastre-as no painel de segredos da hospedagem, nunca em arquivo versionado.
 | Variável | Obrigatória | Observação |
 |---|---|---|
 | `SPRING_PROFILES_ACTIVE` | sim | `prod` (o Dockerfile já define) |
-| `DB_URL` | sim | `jdbc:postgresql://host:5432/banco?sslmode=require`; banco **exclusivo** de produção |
+| `DB_URL` | sim | `jdbc:postgresql://host:5432/banco?sslmode=require`; banco **exclusivo** de produção, com o nome exatamente igual a `DB_NOME_PRODUCAO`, em minúsculas, sem `%` e sem parâmetros `PGDBNAME`, `PGHOST`, `PGPORT`, `service` ou `dbname` |
+| `DB_NOME_PRODUCAO` | sim | Nome do banco de produção autorizado (letras minúsculas, números e `_`). Não pode ser `frotamais` nem conter `test`, `dev`, `local`, `integracao`, `missao`, `ensaio`, `copia`, `homolog`, `staging`, `sandbox`, `demo`, `exemplo`, `tmp`, `temp`, `backup`, `bkp` ou `descartavel`. **Sem ele o `prod` não sobe**; ainda não há banco de produção contratado |
 | `DB_USER`, `DB_PASSWORD` | sim | Usuário próprio da aplicação, não o superusuário |
 | `JWT_SECRET` | sim | Base64 de ≥ 32 bytes, **novo** (nunca o de desenvolvimento): `openssl rand -base64 48` |
 | `CORS_ORIGENS_PERMITIDAS` | sim | Origem https exata do front-end; várias separadas por vírgula; nunca `*` |
@@ -63,12 +64,15 @@ check: `GET /actuator/health`.
 
 1. Banco **novo, vazio e exclusivo** (PostgreSQL 16), com usuário próprio e
    backup automático habilitado na hospedagem.
-2. Na primeira subida, o Flyway aplica V1 a V11. O perfil `prod` fixa
+2. Na primeira subida, o Flyway aplica V1 a V12. O perfil `prod` fixa
    `clean-disabled=true` e `baseline-on-migrate=false`.
-3. **Nunca** apontar para `frotamais`, `frotamais_integracao`,
-   `frotamais_test*` ou `frotamais_descartavel*`. Os três últimos são recusados
-   pela `GuardaProducao`. O `frotamais` do Codespaces tem tabelas sem histórico
-   do Flyway e não deve ser adotado sem o plano de `docs/MIGRATIONS.md`.
+3. **Nunca** apontar para `frotamais`, `frotamais_dev_local`,
+   `frotamais_integracao*`, `frotamais_test*`, `frotamais_missao_*`,
+   `frotamais_ensaio*` ou `frotamais_descartavel*`. A `GuardaProducao` recusa
+   todos eles: só o banco de `DB_NOME_PRODUCAO` é aceito, e só se a conexão
+   chegar a ele (`current_database()`). O `frotamais` do Codespaces tem tabelas
+   sem histórico do Flyway e não deve ser adotado sem o plano de
+   `docs/MIGRATIONS.md`.
 4. Banco já com tabelas e sem `flyway_schema_history`: o Flyway recusa subir
    ("non-empty schema"). **Pare**: não use baseline nem repair por tentativa e
    erro (ver `docs/MIGRATIONS.md`).
@@ -98,7 +102,7 @@ check: `GET /actuator/health`.
 - **Rollback da aplicação:** reimplantar a imagem ou o commit anterior.
 - **Rollback de schema:** as migrations só avançam. Antes de publicar uma
   versão com migration nova, faça o backup do banco. Para voltar, restaure o
-  backup (operação destrutiva, só com autorização). V1 a V11 rodam uma única
+  backup (operação destrutiva, só com autorização). V1 a V12 rodam uma única
   vez, no banco novo.
 
 ## 7. Verificação após o deploy (smoke test)
@@ -130,7 +134,8 @@ Ele está coberto pela suíte com tokens reais (`PermissaoViagemTest`,
 
 Jar real com `SPRING_PROFILES_ACTIVE=prod` no Codespaces, contra o banco novo
 `frotamais_ensaio_prod`, com `JWT_SECRET` aleatório gerado na sessão e não
-gravado:
+gravado (ensaio anterior à guarda fail-closed de 26/11/2026: hoje esse nome é
+recusado, e o ensaio precisa de um banco autorizado em `DB_NOME_PRODUCAO`):
 
 | Verificação | Resultado |
 |---|---|
