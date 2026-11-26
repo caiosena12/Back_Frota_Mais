@@ -31,9 +31,9 @@ Build completo e testes **não foram executados** nesta revisão. Os testes fora
 
 ### 0.4 Atualização de 11/11/2026 [IMPLEMENTADO]
 
-Branch `feat/evolucao-mvp-frota-mais`, ainda não integrada à `main`. **O que está abaixo prevalece sobre trechos antigos deste documento que digam o contrário.** Algumas regras antigas das seções 2 e 3 foram substituídas por decisões mais recentes do proprietário, registradas fora deste repositório. Na dúvida, o código e os testes descrevem o comportamento atual.
+Feita na branch `feat/evolucao-mvp-frota-mais`, **integrada à `main`** (PR #4, merge `e8a206e`); depois vieram os PRs #5 (`fix/pendencias-producao`), #6 (`release/producao`) e #7 (`fix/lancamentos-quilometragem`, V12 e contratos 1.2). O estado de 26/11/2026 está na seção 0.5. **O que está abaixo prevalece sobre trechos antigos deste documento que digam o contrário.** Algumas regras antigas das seções 2 e 3 foram substituídas por decisões mais recentes do proprietário, registradas fora deste repositório. Na dúvida, o código e os testes descrevem o comportamento atual.
 
-- **Schema versionado pelo Flyway** (`src/main/resources/db/migration`, V1 a V11) com `ddl-auto=validate`. Os testes usam o banco `frotamais_test_flyway`, montado só pelas migrations; o antigo `frotamais_test` não é mais usado. Adoção no banco de desenvolvimento: `docs/MIGRATIONS.md` (ainda **não executada** em `frotamais`).
+- **Schema versionado pelo Flyway** (`src/main/resources/db/migration`, V1 a V11 nesta data; V12 desde o PR #7) com `ddl-auto=validate`. Os testes usam o banco `frotamais_test_flyway`, montado só pelas migrations; o antigo `frotamais_test` não é mais usado. Adoção no banco de desenvolvimento: `docs/MIGRATIONS.md` (ainda **não executada** em `frotamais`).
 - **CI** no GitHub Actions (`.github/workflows/ci.yml`): migrations, suíte completa e build num PostgreSQL descartável.
 - **Erros padronizados** `{"status","erro","detalhes"}` em todas as respostas, inclusive `401` e `403` (`comum/ApiExceptionHandler`, `comum/RespostasSeguranca`). Não há mais `ResponseStatusException` no código.
 - **Caminhões:** marca e eixos (obrigatórios em cadastros e alterações; caminhões antigos ficam nulos até serem editados), situação `ATIVO`, `INATIVO` ou `EXCLUIDO`. O `DELETE` é **exclusão lógica**: recusado com viagem em andamento; o histórico fica intacto. A placa é normalizada (maiúsculas, sem separadores) e única entre os caminhões não excluídos da empresa.
@@ -49,9 +49,22 @@ Branch `feat/evolucao-mvp-frota-mais`, ainda não integrada à `main`. **O que e
 - **Configuração:** a base não tem credenciais padrão; o perfil `dev` (ativado pelo `run-dev-frotamais.sh`) traz os valores locais. `open-in-view` desligado.
 - **E-mail:** o e-mail continua **único em todo o sistema** (restrição no banco). A regra antiga de permitir o mesmo e-mail em empresas diferentes (seções 2.6 e 4.5) não vale mais.
 
-- **Verificação:** `./mvnw clean verify` em 11/11/2026, no Codespaces: 218 testes, 0 falhas, contra `frotamais_test_flyway` montado pelas migrations V1 a V11. A V11 também foi aplicada pelo Flyway numa cópia descartável de banco legado (`docs/MIGRATIONS.md`).
+- **Verificação (histórica):** `./mvnw clean verify` em 11/11/2026, no Codespaces: 218 testes, 0 falhas, contra `frotamais_test_flyway` montado pelas migrations V1 a V11. A V11 também foi aplicada pelo Flyway numa cópia descartável de banco legado (`docs/MIGRATIONS.md`). Contagem atual: seção 0.5.
 
 Endpoints e códigos de resposta: `docs/API.md`.
+
+### 0.5 Atualização de 26/11/2026 [IMPLEMENTADO]
+
+Prevalece sobre a seção 0.4 e trechos antigos onde houver diferença.
+
+- **Estado da `main`:** `4571d2f` (PR #7). Migrations **V1 a V12** (V12: quilometragem do abastecimento). Contratos HTTP **1.2** (`docs/RELEASE_HANDOFF.md`): quilometragem obrigatória nos abastecimentos novos, `hora` não é mais recebida, leitura estrita do JSON (campo desconhecido e inteiro com decimal ou texto → `400`).
+- **Ambiente principal: Windows** (VS Code, Claude Code, PowerShell; Git Bash para os `.sh`), com Temurin JDK 21, PostgreSQL 16 local (serviço `postgresql-x64-16`, só `localhost`) e Maven Wrapper 3.10.0. O Codespaces continua como alternativa. Detalhes no `CLAUDE.md` e no Anexo B.
+- **Bancos locais (Windows):** `frotamais_test_flyway` só para a suíte; `frotamais_dev_local` para rodar a API (`run-dev-frotamais.ps1`). O `frotamais` não existe no Postgres do Windows; existe só no Codespaces, ainda sem Flyway.
+- **Perfil `dev` sem banco padrão:** `DB_URL` passou a ser obrigatória também no `dev`, para a API nunca cair em silêncio num banco persistente. `run-dev-frotamais.ps1` usa `frotamais_dev_local`; no Codespaces, informe `DB_URL` ao `run-dev-frotamais.sh`.
+- **Guarda de produção fail-closed** (`seguranca/GuardaProducao`): o perfil `prod` exige `DB_NOME_PRODUCAO`, nome que não pode ser de desenvolvimento, teste, integração ou ensaio. A `DB_URL` tem de apontar exatamente para ele, e o PostgreSQL tem de confirmar o banco (`current_database()`) antes do Flyway. Sem banco de produção contratado, o `prod` não sobe.
+- **Datas estritas:** `LocalDate` só aceita `AAAA-MM-DD`. Data com horário (ex.: `new Date().toISOString()`) passou a dar `400`; antes o horário era descartado e, com `Z`, o dia era tomado em UTC, gravando o lançamento no dia seguinte quando feito à noite.
+- **Limite de tentativas** (`429`) em login, registro e ativação, e **CORS** por `CORS_ORIGENS_PERMITIDAS` já existem (PR #5 e #6). Os trechos antigos que dizem o contrário são históricos.
+- **Verificação:** `.\mvnw.cmd clean verify` em 26/11/2026, no Windows: 339 testes em 49 classes, 0 falhas, 0 erros, 0 ignorados, BUILD SUCCESS, com Java 21, contra `frotamais_test_flyway`.
 
 ---
 
@@ -80,13 +93,10 @@ Endpoints e códigos de resposta: `docs/API.md`.
 
 ### 1.4 Funcionalidades do produto
 
-Implementadas: **autenticação**, **multiempresa**, **gestão de caminhões** (restrição por motorista ainda pendente) e, desde 08/11/2026, o **módulo de viagens** (seção 4.9): fretes com deslocamento vazio, abastecimentos de diesel e Arla, pedágios, despesas extras, rentabilidade por frete e indicadores por período. Hoje só o DONO acessa viagens.
+Implementadas (estado de 26/11/2026): **autenticação**, **multiempresa**, **gestão de caminhões** (com exclusão lógica), **motoristas** por convite por e-mail e vínculo com caminhões, o **módulo de viagens** (seção 4.9: fretes com deslocamento vazio, abastecimentos de diesel e Arla com quilometragem, pedágios, despesas extras, cancelamento, viagem histórica, auditoria das correções), **manutenções**, rentabilidade por frete e **indicadores** por período e por caminhão (custo e lucro por km, consumo médio). O MOTORISTA acessa só as viagens dos caminhões vinculados, sem dados financeiros (seção 0.4).
 
-Planejadas, **ainda sem código**:
-- Manutenções.
-- Custo e lucro por km; consumo médio agregado.
-- Dashboards e relatórios (a API de indicadores já fornece os totais).
-- Criação e gestão de motoristas, e liberação das viagens ao MOTORISTA.
+Planejadas, **ainda sem código no back-end**:
+- Dashboards e relatórios (a API de indicadores já fornece os totais; as telas são do front-end).
 
 **[IDEIA FUTURA]:** exportação em PDF/Excel; análise de km vazio entre fretes.
 
@@ -213,11 +223,11 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 
 ### 2.6 Cadastro de empresas e usuários
 
-- **[CONFIRMADO]** **Um mesmo e-mail pode estar associado a empresas diferentes.** O e-mail **não** é necessariamente único no sistema.
+- **[SUPERADA 11/11/2026]** ~~Um mesmo e-mail pode estar associado a empresas diferentes.~~ Decisão mais recente do proprietário (seção 0.4): **o e-mail é único em todo o sistema** (`uk_usuarios_email` na V1; registro e convite com e-mail existente respondem `409`).
 - **[CONFIRMADO]** **O CNPJ não é obrigatório** para cadastrar uma empresa. Não criar validações ou restrições adicionais sem aprovação.
 - **[CONFIRMADO]** O registro público cria uma empresa e seu primeiro usuário DONO. O cliente nunca escolhe o perfil.
 
-**Lacuna no código:** o modelo atual **impede** a primeira regra (seção 4.5). A entidade `Empresa` não tem CNPJ, portanto a segunda regra já é atendida.
+O código segue a regra vigente (e-mail único); a seção 4.5 é histórica. A entidade `Empresa` não tem CNPJ, portanto a segunda regra já é atendida.
 
 ### 2.7 Caminhões e motoristas
 
@@ -284,7 +294,7 @@ O sistema **não transfere lançamentos** de uma viagem para outra: ele não tem
 - **Manutenções** como histórico por caminhão, abatido no mês.
 - Dashboard do dono; Relatórios por último.
 - Perfis **DONO** e **MOTORISTA**; motorista vinculado ao caminhão, vendo só os seus.
-- Mesmo e-mail permitido em empresas diferentes; CNPJ não obrigatório.
+- E-mail único em todo o sistema (substituiu, em 11/11/2026, "mesmo e-mail em empresas diferentes"); CNPJ não obrigatório.
 - **Frete visível ao motorista.**
 - Site **responsivo para celular**, exigindo internet.
 - Sistema **multiempresa**, com dados isolados por empresa.
@@ -449,7 +459,7 @@ A busca do login precisa considerar a identidade do usuário sem pressupor e-mai
 
 Implementado: BCrypt; validação de assinatura, tempo e emissor do JWT; verificação do usuário ativo e da empresa a cada requisição; perfis lidos do banco; `@PreAuthorize("hasRole('DONO')")` em POST, PUT e DELETE de caminhões; DTOs sem entidade `Empresa` nem hash.
 
-Pontos de atenção (**[PROPOSTO]** correções, nenhuma feita):
+Pontos de atenção (**lista histórica de 02/11/2026**). Já resolvidos depois dela: restrição do motorista nos caminhões, causa registrada no `409`, formato único de erro com `401`/`403` em JSON, placa normalizada, `Locale.ROOT`, **limite de tentativas** e equalização de tempo no login (`seguranca/LimitesTentativas`, `docs/CONFIGURACAO_SMTP.md`), exclusão lógica do caminhão, perfis `dev`/`prod` sem senha padrão na base, criação de MOTORISTA por convite e fim do `ResponseStatusException`. Itens originais:
 
 - `GET /api/caminhoes` e `GET /api/caminhoes/{id}` não respeitam a regra do motorista (seção 2.7).
 - `ApiExceptionHandler` transforma **toda** `DataIntegrityViolationException` em `409` **sem registrar a causa**, o que já escondeu um bug da coluna `ano`.
@@ -654,6 +664,8 @@ Valor ausente, não positivo, ou mínimo ≥ máximo impede a aplicação de sub
 
 ### 6.1 Último estado conhecido
 
+**Atual (26/11/2026): seção 0.5.** Os itens abaixo são o registro de 08/11/2026.
+
 - **Branch `feat/viagens`**, criada a partir de `c9dcaf9` (merge do PR #3), com o módulo de viagens, as correções das duas auditorias e as despesas extras livres.
 - **Auditoria final em 08/11/2026:** 104 testes, 0 falhas, em duas execuções seguidas em `frotamais_test`; API iniciada contra `frotamais_test` respondendo `401` sem token. Depois disso, a `main` foi avançada até `feat/viagens` (fast-forward, sem PR), por autorização do responsável, e enviada ao GitHub.
 
@@ -804,13 +816,14 @@ Atualizada em 02/11/2026, com a suíte de 17 testes executada no Codespaces.
 
 ### 6.5 Status das frentes
 
-**Implementado**
-- Ambiente Codespaces + PostgreSQL.
-- Registro e login JWT, com perfis lidos do banco.
-- Isolamento por empresa em caminhões e viagens.
-- CRUD de caminhões, com escrita só para DONO.
-- Módulo de viagens, correções das auditorias e despesas extras livres, na `main` desde 08/11/2026.
-- 104 testes automatizados.
+**Implementado** (26/11/2026)
+- Ambiente Windows (principal) e Codespaces (alternativo), ambos com PostgreSQL 16 e Java 21.
+- Registro e login JWT, com perfis lidos do banco; limite de tentativas (`429`).
+- Isolamento por empresa em caminhões, motoristas, manutenções e viagens.
+- CRUD de caminhões (escrita só para DONO, exclusão lógica); motoristas por convite.
+- Módulo de viagens completo (seção 0.4), manutenções e indicadores.
+- Flyway V1 a V12, CI, perfil `prod` com guarda fail-closed.
+- 339 testes automatizados em 49 classes (26/11/2026, seção 0.5).
 
 **Em desenvolvimento**
 - Decisões ainda abertas do Anexo A (P7, P8, P20 e seguintes).
@@ -839,9 +852,11 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 
 **Atualização de 11/11/2026:** as etapas 4 (migrations e CI), 5 (erros), 8 (vínculo motorista–caminhão) e 10 (manutenções) foram feitas na branch `feat/evolucao-mvp-frota-mais`, além do cancelamento, da auditoria de correções, do abastecimento entre viagens e de novos indicadores (seção 0.4). A etapa 7 deixou de existir: o e-mail é único em todo o sistema. A etapa 11 ganhou custo e lucro por km e consumo médio.
 
-**Lacunas técnicas conhecidas em 11/11/2026:** sem rate limit em login, registro e ativação; CORS não configurado (depende do Angular, P13); `frotamais` do Codespaces ainda sem Flyway (`docs/MIGRATIONS.md`, exige autorização).
+**Atualização de 26/11/2026:** rate limit (`429`) e CORS (`CORS_ORIGENS_PERMITIDAS`) foram implementados (PR #5 e #6). Lacunas atuais: limite de tentativas em memória (por instância); troca de senha não invalida os tokens já emitidos (expiram em `JWT_HORAS`); hospedagem, banco de produção (`DB_NOME_PRODUCAO`) e SMTP de produção não definidos; `frotamais` do Codespaces ainda sem Flyway.
 
-**Antes de disponibilizar a API publicamente:** rate limit em registro, login e ativação de convite, HTTPS, backup e avaliação de LGPD, já que o sistema guardará dados pessoais e financeiros de terceiros. Perfis sem credenciais padrão: feito em 11/11/2026.
+**Lacunas técnicas conhecidas em 11/11/2026 (histórico):** sem rate limit em login, registro e ativação; CORS não configurado (depende do Angular, P13); `frotamais` do Codespaces ainda sem Flyway (`docs/MIGRATIONS.md`, exige autorização).
+
+**Antes de disponibilizar a API publicamente:** ~~rate limit em registro, login e ativação de convite~~ (feito), HTTPS, backup e avaliação de LGPD, já que o sistema guardará dados pessoais e financeiros de terceiros. Perfis sem credenciais padrão: feito em 11/11/2026.
 
 ---
 
@@ -895,7 +910,7 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 
 **Decisões técnicas**
 
-- **P11.** Modelo de identidade e login para o mesmo e-mail em empresas diferentes, inclusive o efeito sobre a redefinição de senha pelo dono.
+- ~~**P11.**~~ Resolvida em 11/11/2026: e-mail único em todo o sistema (seção 0.4).
 - **P12.** Modelo da associação motorista–caminhão.
 - **P13.** Local do Angular e estratégia de CORS ou proxy em desenvolvimento e produção.
 - **P14.** Validar a lista da seção 3.4, que é uma consolidação, não uma lista ditada pelo responsável pelo produto.
@@ -904,11 +919,12 @@ As etapas são cumulativas. **Segurança, testes e validações evoluem junto co
 
 ## Anexo B. Ambiente e comandos (sem credenciais)
 
-- **Caminho:** `/workspaces/Back_Frota_Mais` (Codespaces).
-- **Variáveis:** `JWT_SECRET` (Base64, ≥32 bytes) e `JWT_HORAS` ficam em `.frotamais-jwt.env`, fora do Git. `DB_URL`, `DB_USER` e `DB_PASSWORD` são obrigatórias fora do perfil `dev`; no `dev` só sobrescrevem os padrões locais. E-mail: `EMAIL_REMETENTE`, `CONVITE_URL_ATIVACAO`, `CONVITE_VALIDADE_HORAS` e as variáveis `SPRING_MAIL_*` (README).
-- **Rodar a API:** `./run-dev-frotamais.sh`, em um terminal dedicado.
+- **Caminho:** `C:\Users\caios\Projetos\Back_Frota_Mais` (Windows, principal) ou `/workspaces/Back_Frota_Mais` (Codespaces).
+- **Windows:** Temurin JDK 21 como padrão (o Java 17 continua instalado), PostgreSQL 16 no serviço `postgresql-x64-16`, escutando só em `127.0.0.1` e `::1`; `psql` em `C:\Program Files\PostgreSQL\16\bin` (no PATH do usuário). Bancos: `frotamais_test_flyway` (suíte) e `frotamais_dev_local` (API local).
+- **Variáveis:** `JWT_SECRET` (Base64, ≥32 bytes) e `JWT_HORAS` ficam em `.frotamais-jwt.env`, fora do Git, com uma chave diferente em cada ambiente. `DB_URL` é obrigatória em todos os perfis; `DB_USER` e `DB_PASSWORD` só têm padrão local no `dev`. No `prod`, também `DB_NOME_PRODUCAO`. E-mail: `EMAIL_REMETENTE`, `CONVITE_URL_ATIVACAO`, `CONVITE_VALIDADE_HORAS` e as variáveis `SPRING_MAIL_*`; no Windows, SMTP local em `.frotamais-smtp.env` (fora do Git, `docs/CONFIGURACAO_SMTP.md`).
+- **Rodar a API:** Windows: `.\run-dev-frotamais.ps1` (captura local de e-mails; `-Email smtp` para envio real). Codespaces: `DB_URL=jdbc:postgresql://localhost:5432/frotamais ./run-dev-frotamais.sh`. Em um terminal dedicado.
 - **Testar sem token:** `curl -i http://localhost:8080/api/caminhoes` deve dar `401`.
-- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test`. Os testes usam só `frotamais_test_flyway` (criado vazio; as migrations montam o schema) e falham se ele não existir.
+- **Build e testes:** `./mvnw clean package -DskipTests` e `./mvnw test` (Windows: `.\mvnw.cmd clean verify`). Os testes usam só `frotamais_test_flyway` (criado vazio; as migrations montam o schema) e falham se ele não existir.
 - **Banco:** `psql -h localhost -p 5432 -U postgres -d frotamais`; `\dt`, `\conninfo`; `pg_isready -h localhost -p 5432`.
 - **Portas:** 8080 (API), 4200 (Angular), 5432 (PostgreSQL). **Deixar a 5432 privada.** A 8080 só fica pública temporariamente, para testes externos.
 - **Postman:** usar a URL encaminhada da porta 8080; rotas protegidas com *Bearer Token*; corpo `raw` → `JSON`.

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Frota+ é a API REST de um sistema multiempresa de gestão financeira para transporte rodoviário de cargas. Responda em português.
 
 - **Código e Git:** fonte de verdade sobre o que existe.
-- **`docs/CONTEXTO_FROTA_MAIS.md`:** contexto técnico, roadmap (seção 6.6) e pendências (Anexo A); a seção 0.4 resume o estado de 11/11/2026 e prevalece sobre trechos antigos. Também é a referência de regras de negócio quando o documento privado abaixo não existir no clone. Leia as seções relevantes antes de tocar em um domínio. Se divergir do código, reporte; não ajuste um para coincidir com o outro.
+- **`docs/CONTEXTO_FROTA_MAIS.md`:** contexto técnico, roadmap (seção 6.6) e pendências (Anexo A); as seções 0.5 (26/11/2026) e 0.4 (11/11/2026) resumem o estado atual e prevalecem sobre trechos antigos. Também é a referência de regras de negócio quando o documento privado abaixo não existir no clone. Leia as seções relevantes antes de tocar em um domínio. Se divergir do código, reporte; não ajuste um para coincidir com o outro.
 - **`docs/API.md`:** endpoints, permissões e códigos de resposta. Atualize junto com qualquer mudança de contrato.
 - **`contexto-local/`:** privado, ignorado pelo Git e presente só em alguns clones. Nunca copie o conteúdo para arquivos versionados. O repositório é **público**.
 - **`contexto-local/REGRAS_DE_NEGOCIO_FROTA_MAIS.md`:** se existir neste clone, leia antes de qualquer trabalho que envolva regras de negócio. Nesse caso, ele é a fonte de verdade das decisões de negócio e prevalece sobre regras mais antigas deste arquivo e do `docs/CONTEXTO_FROTA_MAIS.md`, que continua valendo para arquitetura, implementação e roadmap técnico. Regras que o documento marca como pendentes precisam ser discutidas com o proprietário antes de qualquer implementação.
@@ -14,30 +14,34 @@ Frota+ é a API REST de um sistema multiempresa de gestão financeira para trans
 
 ### Ambientes
 
-- **Principal:** GitHub Codespaces (Linux, Java 21, PostgreSQL 16 em `localhost:5432`). É onde se desenvolve, executa o backend, faz build e roda testes.
-- **Auxiliar:** notebook Windows. Serve para usar o Claude Code, ler documentos, planejar e alterar arquivos quando necessário. Tem Java 17, e o projeto exige Java 21. **Não presuma que ele executa ou testa o backend.**
-- **Sincronização:** GitHub. Não trabalhe nos dois clones ao mesmo tempo sem sincronizar. Antes de começar em um deles, confira `git status` e se ele está atualizado com `origin/main`.
+- **Principal (desde 26/11/2026): Windows**, com VS Code, Claude Code, PowerShell (Git Bash para os `.sh`), Eclipse Temurin JDK 21 (padrão do sistema; o Java 17 continua instalado e não deve ser removido), PostgreSQL 16 local e Maven Wrapper 3.10.0. É onde se desenvolve, executa o backend, faz build e roda testes.
+- **Alternativo:** GitHub Codespaces (Linux, Java 21, PostgreSQL 16 em `localhost:5432`), quando houver cota disponível.
+- **Sincronização:** GitHub. Não trabalhe nos dois clones ao mesmo tempo sem sincronizar. Antes de começar em um deles, confira `git status` e se ele está atualizado com `origin/main`. Arquivos ignorados (`.frotamais-*.env`, `contexto-local/`) não viajam pelo Git: cada ambiente tem os seus.
 
-**Não prepare o notebook:** não atualize o Java, não instale PostgreSQL ou outras ferramentas e não configure credenciais nele. Quando uma tarefa exigir build ou testes, use o Codespaces, respeitando as regras abaixo. Se estiver no notebook, informe o que precisa ser rodado lá e não afirme que foi verificado.
+**PostgreSQL do Windows:** serviço `postgresql-x64-16` (início automático), escutando **só em `127.0.0.1` e `::1`** (`listen_addresses = 'localhost'`; nunca `*`, nunca liberar a 5432 na rede ou no firewall). `psql` em `C:\Program Files\PostgreSQL\16\bin`, no PATH do usuário. Bancos: `frotamais_test_flyway` (só a suíte) e `frotamais_dev_local` (API local). O `frotamais` não existe no Windows e não deve ser criado por padrão.
 
-Comandos do Maven Wrapper. Execute a coluna do Codespaces; a coluna Windows é só referência, enquanto o notebook não estiver preparado:
+**Este processo do Claude Code** pode ter sido aberto antes de alguma mudança de PATH: confira `java -version`. Se aparecer 17, defina na sessão `$env:JAVA_HOME = [Environment]::GetEnvironmentVariable('JAVA_HOME','Machine').TrimEnd('\'); $env:Path = "$env:JAVA_HOME\bin;$env:Path"`.
 
-| Ação | Linux (Codespaces) | Windows (PowerShell) |
+Comandos do Maven Wrapper:
+
+| Ação | Windows (PowerShell, principal) | Linux (Codespaces) |
 |---|---|---|
-| Validar o `pom.xml` | `./mvnw validate` | `.\mvnw.cmd validate` |
-| Build sem testes | `./mvnw clean package -DskipTests` | `.\mvnw.cmd clean package -DskipTests` |
-| Subir a API na 8080 | `./run-dev-frotamais.sh` | `$env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run` |
-| Testar uma classe | `./mvnw test -Dtest=SegurancaCaminhaoTest` | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest` |
-| Testar um método | `./mvnw test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` |
-| Toda a suíte | `./mvnw test` | `.\mvnw.cmd test` |
+| Validar o `pom.xml` | `.\mvnw.cmd validate` | `./mvnw validate` |
+| Build sem testes | `.\mvnw.cmd clean package -DskipTests` | `./mvnw clean package -DskipTests` |
+| Subir a API na 8080 | `.\run-dev-frotamais.ps1` (banco `frotamais_dev_local`; `-Email captura\|smtp\|nenhum`) | `DB_URL=jdbc:postgresql://localhost:5432/frotamais ./run-dev-frotamais.sh` |
+| Testar uma classe | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest` | `./mvnw test -Dtest=SegurancaCaminhaoTest` |
+| Testar um método | `.\mvnw.cmd test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` | `./mvnw test -Dtest=SegurancaCaminhaoTest#deveBloquearListagemSemToken` |
+| Toda a suíte e build | `.\mvnw.cmd clean verify` | `./mvnw clean verify` |
 
-**Scripts `.sh`** rodam apenas em ambiente compatível com Bash, como o Codespaces, Git Bash ou WSL. Não funcionam no PowerShell nem no `cmd`. `run-dev-frotamais.sh` carrega `.frotamais-jwt.env`, exige `JWT_SECRET` e ativa o perfil `dev` (credenciais locais do banco em `application-dev.properties`); sem o script, `JWT_SECRET` e o perfil precisam estar definidos na sessão. Sem perfil, `DB_URL`, `DB_USER` e `DB_PASSWORD` são obrigatórias (configuração de produção).
+**Inicializadores:** `run-dev-frotamais.ps1` (Windows) lê `.frotamais-jwt.env` e, com `-Email smtp`, `.frotamais-smtp.env` (ambos ignorados), sem imprimir valores; força `DB_URL` para `frotamais_dev_local` (recusa bancos com `test`), confere se o banco existe e se a 8080 está livre, e nunca liga SMTP e captura local juntos. `run-dev-frotamais.sh` (Bash) carrega `.frotamais-jwt.env`, exige `JWT_SECRET` e `DB_URL` e ativa o perfil `dev`. **Scripts `.sh`** rodam só em Bash (Git Bash, Codespaces ou WSL), nunca no PowerShell ou no `cmd`; são versionados com LF (`.gitattributes`). `DB_URL` é obrigatória em todos os perfis (o `dev` não tem banco padrão); `DB_USER`/`DB_PASSWORD` só têm padrão local no `dev`.
+
+**Segredos locais:** `.frotamais-jwt.env` (chave JWT própria de cada ambiente; nunca reutilize a de outro ambiente nem a de produção) e `.frotamais-smtp.env` (Brevo, `docs/CONFIGURACAO_SMTP.md` seção 2.1). Nunca leia, imprima ou copie os valores; para conferir, use comparação sem saída (ex.: `cmp -s`) ou só os nomes das variáveis. A chave JWT antiga do commit `5af35d7` é pública para sempre: nunca a use.
 
 Não há linter configurado.
 
 ### Testes e banco de dados
 
-Todos os testes atuais sobem o contexto completo contra o banco exclusivo `frotamais_test_flyway`, nunca contra `frotamais` (nem o antigo `frotamais_test`, que não é mais usado). Precisam do Postgres ligado e do banco criado vazio (`CREATE DATABASE frotamais_test_flyway`); as migrations montam o schema, como no CI. `src/test/resources/config/application.properties` fixa a URL, e `GuardaBancoDeTeste` interrompe a execução se a conexão efetiva for outra. E-mails são capturados por `suporte/CaixaDeSaidaTeste`; nenhum teste usa SMTP.
+Os testes que sobem o contexto usam o banco exclusivo `frotamais_test_flyway`, nunca `frotamais`, `frotamais_dev_local` nem o antigo `frotamais_test` (que não é mais usado); os testes de unidade (ex.: `GuardaProducaoTest`, `PerfilDevBancoTest`) não abrem conexão. Não use `frotamais_test_flyway` para rodar a API manualmente. Precisam do Postgres ligado e do banco criado vazio (`CREATE DATABASE frotamais_test_flyway`); as migrations montam o schema, como no CI. `src/test/resources/config/application.properties` fixa a URL, e `GuardaBancoDeTeste` interrompe a execução se a conexão efetiva for outra. E-mails são capturados por `suporte/CaixaDeSaidaTeste`; nenhum teste usa SMTP.
 
 - **Não enfraqueça esse isolamento:** não remova o guarda nem aponte os testes para `frotamais`.
 - **Não execute sem autorização explícita** testes que gravam dados permanentes no banco de desenvolvimento.
@@ -87,11 +91,15 @@ Invariantes que não podem ser quebrados:
 
 **Testes:** `jwt()` do `spring-security-test` contorna o `conversor()`. Um teste com ele prova o `@PreAuthorize`, não o fluxo real.
 
-**Produção:** perfil `prod` (`application-prod.properties`), com `seguranca/GuardaProducao` (recusa banco de teste/integração/descartável e CORS ausente, antes do Flyway), CORS por `CORS_ORIGENS_PERMITIDAS` (`seguranca/ConfigCors`) e `GET /actuator/health` público, sem detalhes. Deploy em `docs/DEPLOYMENT_PRODUCTION.md`; contratos congelados em `docs/RELEASE_HANDOFF.md`.
+**Produção:** perfil `prod` (`application-prod.properties`), com `seguranca/GuardaProducao` (fail-closed, antes do Flyway: exige `DB_NOME_PRODUCAO`, que não pode ser de desenvolvimento/teste/integração/ensaio nem `frotamais`; a `DB_URL` tem de apontar exatamente para ele e o `current_database()` tem de confirmar; recusa também CORS ausente e o `dev` junto; sem banco de produção contratado, o `prod` não sobe). Não afrouxe essa guarda para um ensaio passar. Ainda no `prod`: CORS por `CORS_ORIGENS_PERMITIDAS` (`seguranca/ConfigCors`) e `GET /actuator/health` público, sem detalhes. Deploy em `docs/DEPLOYMENT_PRODUCTION.md`; contratos congelados em `docs/RELEASE_HANDOFF.md`.
 
 **Limite de tentativas:** `seguranca/LimitesTentativas` (por IP no `LimiteTentativasInterceptor`, por e-mail nas falhas do login), em memória; desligado na suíte (`app.tentativas.ativo=false` em `src/test/resources/config`) e ligado com limites pequenos nos testes dele. O login confere a senha contra um hash fictício quando não há senha, para não revelar contas pelo tempo. Detalhes em `docs/CONFIGURACAO_SMTP.md`.
 
-**Lacunas conhecidas:** o limite de tentativas é por instância (memória); a API ainda não foi publicada (hospedagem, banco de produção, SMTP e URL do front-end a definir); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
+**Datas:** `LocalDate` só aceita `AAAA-MM-DD` (`comum/ConfigJackson`); data com horário responde `400`, para a data real do lançamento nunca ser deduzida de um instante em UTC.
+
+**Lacunas conhecidas:** o limite de tentativas é por instância (memória); trocar a senha não invalida os tokens já emitidos (valem até expirar, `JWT_HORAS`); a API ainda não foi publicada (hospedagem, banco de produção, SMTP de produção e URL definitiva do front-end a definir); o `frotamais` do Codespaces ainda não adotou o Flyway. O e-mail é único em todo o sistema.
+
+**Regras permanentes do ambiente:** não modificar bancos persistentes sem autorização; testes só no banco isolado; variáveis sensíveis só em arquivos ignorados ou no painel de segredos; nunca publicar segredos; nada de deploy sem autorização; o back-end é a fonte da verdade de contratos e regras de negócio, e o front-end acompanha a versão do contrato HTTP (`docs/RELEASE_HANDOFF.md`, hoje 1.2). Toda mudança que afete o front-end é registrada lá antes de publicada.
 
 ## Modo de trabalho
 
@@ -105,7 +113,7 @@ Invariantes que não podem ser quebrados:
 - Alterar regras de negócio confirmadas ou permissões dos perfis.
 
 **Proteção de dados:**
-- Nunca leia, imprima ou copie `.frotamais-jwt.env`.
+- Nunca leia, imprima ou copie `.frotamais-jwt.env` nem `.frotamais-smtp.env`.
 - Ao consultar `usuarios`, não selecione `senha_hash`.
 - Mantenha a porta 5432 privada.
 - Não enfraqueça a validação do JWT, a checagem de usuário ativo, a comparação de `empresaId` ou os `@PreAuthorize`, nem mesmo para um teste passar.

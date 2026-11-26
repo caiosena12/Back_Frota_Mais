@@ -80,11 +80,11 @@ O script:
 - ativa o perfil `dev` e chama o `run-dev-frotamais.sh`, que carrega a chave
   de `.frotamais-jwt.env` e para com erro claro se ela faltar.
 
-Na primeira subida o Flyway cria as tabelas (V1 a V11). A subida terminou
+Na primeira subida o Flyway cria as tabelas (V1 a V12). A subida terminou
 quando o log mostrar:
 
 ```
-Successfully applied 11 migrations ... now at version v11   (só na primeira vez)
+Successfully applied 12 migrations ... now at version v12   (só na primeira vez)
 Tomcat started on port 8080 (http)
 Started BackendApplication in ... seconds
 ```
@@ -213,7 +213,8 @@ que a porta fique pública. Tornar a porta `8080` pública exige autorização d
 responsável pelo back-end, porque:
 
 - expõe na internet `POST /api/auth/registro`, `/login` e
-  `/api/convites/ativacao`, que **não têm rate limit**;
+  `/api/convites/ativacao`, protegidos só pelo limite de tentativas em memória
+  (`429`), com limites por IP mais folgados no perfil `dev`;
 - qualquer pessoa com a URL pode criar empresas no banco de integração;
 - a URL dura enquanto o Codespace estiver ligado e a porta pública.
 
@@ -345,7 +346,9 @@ dica visual.
 - **Validação antes da permissão**: numa rota proibida ao perfil, um corpo
   inválido responde `400` antes do `403` (ex.: MOTORISTA enviando `{}` para
   `POST /api/viagens/historicas`). Com corpo válido, `403`. Nada é gravado.
-- **Sem rate limit** em login, registro e ativação.
+- **Limite de tentativas** (`429`, com `Retry-After`) em login, registro e
+  ativação; no `dev`, os limites por IP são mais folgados
+  (`application-dev.properties`).
 - **Sem paginação**; sem refresh token (sessão de 8 h por padrão); sem
   endpoint `/me`.
 - Datas de viagem não têm hora: duas viagens do mesmo caminhão não começam no
