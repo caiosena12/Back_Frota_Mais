@@ -45,10 +45,12 @@ Limites e detalhes em `docs/CONFIGURACAO_SMTP.md`, seção 5.
 | Mudança | Tipo | Efeito no front-end |
 |---|---|---|
 | `AbastecimentoRequest`: sai `hora`, entra `quilometragem` (inteiro, km do odômetro, de `0` a `9999999`). Vale para `POST`/`PUT` de `/abastecimentos` e para as listas `abastecimentos` da abertura (`POST /api/viagens`) e da viagem histórica | **Incompatível** | Enviar `quilometragem` como número inteiro (sem pontos, vírgula ou aspas). Sem ela, `400` "Informe a quilometragem do caminhão no abastecimento (odômetro, em km)." Decimal, texto ou fora da faixa: `400` |
-| `hora` enviada no corpo | Ignorada | Não é mais gravada (resposta com `hora: null`) |
+| `hora` enviada no corpo | **`400`** | "Campo desconhecido: 'hora'." Nada é gravado. Sem exceção de compatibilidade: um cliente antigo já falharia pela falta da quilometragem |
 | `AbastecimentoResponse`: entra `quilometragem` (inteiro ou `null`); `hora` continua, só leitura | Aditiva | Mostrar a quilometragem; `null` = abastecimento antigo, sem a informação ("não informada", nunca zero). `hora` só existe em registros antigos |
 | Correção (`PUT`) de abastecimento antigo, gravado sem quilometragem | Regra | Pode continuar sem ela (não é inventada). Depois de informada, não pode ser apagada (`400`) |
 | Auditoria de abastecimento corrigido | Campo | O campo `quilometragem` passa a aparecer em `alteracoes`; registros antigos podem ter `hora` |
+| **Campo desconhecido** em qualquer corpo (`POST`/`PUT`, inclusive itens de listas) | **`400`** (antes era ignorado, ao contrário do que este documento dizia) | "Campo desconhecido: 'x'." Envie só os campos do contrato. Evita que um nome de campo errado seja descartado em silêncio |
+| **Campos inteiros** (`ano`, `eixos`, `capacidadeTanqueLitros`, km da viagem, `quilometragem`, ids e `caminhaoIds`) | **`400`** para `1.5`, `"6"`, `""`, `true` | Antes `1.5` era truncado para `1` e `"6"` virava `6`. Envie número inteiro do JSON. "Campo 'x' com valor inválido." Nada é gravado |
 
 A quilometragem não entra em nenhum cálculo financeiro (a política continua
 `rentabilidade-v1`). Migration `V12__abastecimento_quilometragem.sql`: coluna
@@ -59,10 +61,11 @@ nula nos registros antigos; a coluna `hora` foi mantida com os dados antigos.
 - **Base:** `https://<URL-DA-API>` (ainda a definir; ver o documento de deploy). Prefixo `/api`.
 - **JSON UTF-8.** Datas `AAAA-MM-DD`; horas `HH:MM` ou `HH:MM:SS`; instantes
   (`...Em`) em ISO-8601 UTC; "hoje" segue `America/Sao_Paulo`.
-- **Dinheiro e decimais:** número com até 2 casas.
+- **Dinheiro e decimais:** número com até 2 casas (número ou texto numérico, `1500.00` ou `"1500.00"`).
+- **Inteiros:** só número inteiro do JSON; decimal, texto, vazio ou booleano: `400`.
 - **`PUT` substitui o recurso inteiro.** Não há `PATCH`.
 - **Nulo em cálculo** = não calculável com os dados atuais, nunca zero.
-- **Campo desconhecido no corpo:** `400`.
+- **Campo desconhecido no corpo:** `400` ("Campo desconhecido: 'x'."), desde a `1.2`; nada é gravado.
 
 ## 3. Autenticação (JWT)
 
@@ -206,7 +209,7 @@ ABASTECIMENTO, PEDAGIO, DESPESA_EXTRA.
 |---|---|
 | URL base da API em produção | `https://<URL-DA-API>` (**pendente**: depende da hospedagem) |
 | Origem do front-end | Informar ao back-end a origem https **exata** (ex.: `https://app.exemplo.com`, sem barra final), que vai em `CORS_ORIGENS_PERMITIDAS` |
-| Tela de ativação do convite | Informar a URL (ex.: `https://app.exemplo.com/ativar`). O back-end envia `?token=...` nela, e a tela faz `POST /api/convites/ativacao` |
+| Tela de ativação do convite | Informar a URL (a rota do front é `/ativar-conta`; ex.: `https://app.exemplo.com/ativar-conta`). O back-end envia `?token=...` nela, e a tela faz `POST /api/convites/ativacao` |
 | Cabeçalhos | `Authorization: Bearer ...` e `Content-Type: application/json`. Sem cookies (`withCredentials` desligado) |
 | Proxy do Angular | Só em desenvolvimento. Em produção, URL absoluta da API |
 

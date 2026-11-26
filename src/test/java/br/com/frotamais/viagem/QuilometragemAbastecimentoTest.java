@@ -139,13 +139,13 @@ class QuilometragemAbastecimentoTest extends ApiViagemTeste {
         assertEquals(0, buscarViagem(dono, viagemId).get("abastecimentosDiesel").size());
     }
 
+    /** Contratos 1.2: hora saiu do request. Cliente antigo que a envia recebe 400 (campo desconhecido), sem gravar. */
     @Test
-    void horaEnviadaNaoEMaisGravada() throws Exception {
+    void horaEnviadaERecusadaComoCampoDesconhecido() throws Exception {
         Map<String, Object> c = abastecimento("DIESEL", "2025-06-02", 152430, "100", "600.00");
         c.put("hora", "14:30");
-        JsonNode a = chamar(POST(url + "/abastecimentos"), dono, c, 201);
-        assertTrue(a.get("hora").isNull(), a::toString);
-        assertNull(linha("abastecimentos", a.get("id").asLong()).get("hora"));
+        erro(chamar(POST(url + "/abastecimentos"), dono, c, 400), "Campo desconhecido: 'hora'.");
+        assertEquals(0, buscarViagem(dono, viagemId).get("abastecimentosDiesel").size());
     }
 
     @Test
