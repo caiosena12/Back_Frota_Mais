@@ -148,6 +148,23 @@ class QuilometragemAbastecimentoTest extends ApiViagemTeste {
         assertEquals(0, buscarViagem(dono, viagemId).get("abastecimentosDiesel").size());
     }
 
+    /**
+     * A data real do abastecimento não é deduzida de um instante: data com horário
+     * (como a de new Date().toISOString()) dá 400, em vez de ser gravada num dia
+     * que pode ser outro (em UTC) ou cair no futuro.
+     */
+    @Test
+    void dataComHorarioERecusadaSemGravar() throws Exception {
+        for (String data : List.of("2025-06-02T14:30:00", "2025-06-03T01:30:00.000Z")) {
+            erro(chamar(POST(url + "/abastecimentos"), dono, abastecimento("ARLA", data, 152430, "20", "80.00"), 400),
+                    "Campo 'data' com valor inválido. Use o formato AAAA-MM-DD.");
+        }
+        assertEquals(0, buscarViagem(dono, viagemId).get("abastecimentosArla").size());
+        chamar(POST(url + "/abastecimentos"), dono, abastecimento("ARLA", "2025-06-02", 152430, "20", "80.00"), 201);
+        assertEquals("2025-06-02",
+                buscarViagem(dono, viagemId).get("abastecimentosArla").get(0).get("data").asString());
+    }
+
     @Test
     void bancoRecusaQuilometragemNegativa() throws Exception {
         long id = chamar(POST(url + "/abastecimentos"), dono,

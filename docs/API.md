@@ -21,8 +21,11 @@ testes em `src/test/java` comprovam cada regra com tokens reais.
   (DONO ou MOTORISTA) vem do banco, não do token.
 - **Empresa:** nunca é enviada pelo cliente; vem do usuário autenticado. Recurso
   de outra empresa responde `404`, como se não existisse.
-- **Datas:** `AAAA-MM-DD`; horas `HH:MM` ou `HH:MM:SS`; instantes em ISO-8601
-  UTC. "Hoje" e "agora" seguem o fuso `America/Sao_Paulo`.
+- **Datas:** `AAAA-MM-DD`, sem horário: `"2026-11-21T14:30:00"` ou
+  `"2026-11-22T01:30:00.000Z"` respondem `400` ("Campo 'x' com valor inválido.
+  Use o formato AAAA-MM-DD."), em vez de virar uma data, que em UTC pode ser
+  outro dia (`comum/ConfigJackson`). Horas `HH:MM` ou `HH:MM:SS`; instantes em
+  ISO-8601 UTC. "Hoje" e "agora" seguem o fuso `America/Sao_Paulo`.
 - **Dinheiro:** número decimal com até 2 casas (`"1500.00"` ou `1500.00`).
 - **Inteiros** (km, `quilometragem`, `ano`, `eixos`, `capacidadeTanqueLitros`,
   ids, `caminhaoIds`): só número inteiro do JSON. `1.5`, `"6"`, `""` ou `true`

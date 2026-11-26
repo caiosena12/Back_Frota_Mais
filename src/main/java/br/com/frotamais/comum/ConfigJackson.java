@@ -1,8 +1,12 @@
 package br.com.frotamais.comum;
 
+import java.time.LocalDate;
+
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.cfg.CoercionAction;
@@ -23,6 +27,11 @@ import tools.jackson.databind.type.LogicalType;
  * o Jackson truncaria {@code 1.5} para {@code 1} e converteria {@code "152430"}
  * e {@code true} antes de a validação ver o valor. Agora esses casos respondem
  * 400 ("Campo 'x' com valor inválido.") e nada é gravado.</li>
+ * <li><b>Datas</b> ({@code LocalDate}): só {@code AAAA-MM-DD}. Por padrão o
+ * Jackson aceitaria uma data com horário e descartaria a hora; com "Z" ainda
+ * tomaria o dia em UTC (21/11 às 22:30 em São Paulo viraria 22/11), e o
+ * lançamento ficaria com uma data que não é a real. Agora: 400 ("Campo 'x' com
+ * valor inválido. Use o formato AAAA-MM-DD.").</li>
  * </ul>
  *
  * Valores monetários e litros ({@code BigDecimal}) não mudam: aceitam número ou
@@ -40,6 +49,7 @@ public class ConfigJackson {
                         .setCoercion(CoercionInputShape.Float, CoercionAction.Fail)
                         .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
                         .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)
-                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail));
+                        .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail))
+                .withConfigOverride(LocalDate.class, o -> o.setFormat(JsonFormat.Value.forLeniency(false)));
     }
 }

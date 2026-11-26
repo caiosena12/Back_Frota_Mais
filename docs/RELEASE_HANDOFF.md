@@ -2,23 +2,28 @@
 
 **Contratos: versão `1.2` (25/11/2026), congelados.** A `1.1` só **acrescentou**
 o `429` (seção 1.1). A `1.2` troca o horário pela quilometragem no
-abastecimento (seção 1.2); é a única mudança incompatível desde a `1.0`. A partir daqui,
+abastecimento (seção 1.2); é a única mudança incompatível desde a `1.0`. Em
+26/11/2026 houve uma **correção** dentro da `1.2` (seção 1.3): datas com horário
+passaram a ser recusadas, como o contrato já dizia. A partir daqui,
 qualquer mudança que afete o front-end (rota, método, campo, tipo, código de
 resposta ou permissão) precisa ser comunicada e registrada neste documento
 **antes** de ser publicada.
 
 | Item | Valor |
 |---|---|
-| Base analisada | `main` em `fc644d3` + branch `release/producao` |
+| Base analisada | `main` em `fc644d3` + branch `release/producao` (1.0 e 1.1); `main` em `4571d2f` (1.2) |
 | Commit publicado | ver `docs/DEPLOYMENT_PRODUCTION.md`, seção "Registro de publicação" |
-| Migrations | V1 a V11 (Flyway) |
+| Migrations | V1 a V12 (Flyway; V12 na `1.2`) |
 | Política de cálculo | `rentabilidade-v1` (`CalculadoraRentabilidade.VERSAO_POLITICA`) |
 | Referência normativa | [`docs/API.md`](API.md): regras de cada rota. Este documento é o resumo congelado |
 
 ## 1. O que mudou para o front-end neste release
 
-Nenhuma rota, DTO, tipo, código de resposta ou permissão existente mudou. O
-que o front-end já testou contra a API real continua valendo. Novidades:
+**Na versão 1.0** (base `fc644d3`), nenhuma rota, DTO, tipo, código de
+resposta ou permissão existente mudou em relação ao que o front-end já tinha
+testado contra a API real. As versões seguintes mudaram contratos: `1.1`
+(seção 1.1, aditiva), `1.2` (seção 1.2, **incompatível** no abastecimento e na
+leitura do JSON) e a correção de datas (seção 1.3). Novidades da 1.0:
 
 | Mudança | Efeito no front-end |
 |---|---|
@@ -36,7 +41,7 @@ O navegador não entrega essa resposta ao JavaScript de qualquer forma.
 |---|---|---|
 | `429 Muitas tentativas` em `POST /api/auth/login`, `/api/auth/registro` e `/api/convites/ativacao`, com cabeçalho `Retry-After` (segundos), exposto no CORS | Aditiva | Mostrar `detalhes[0]` e não repetir a tentativa antes do `Retry-After`. O corpo segue `{status, erro, detalhes}` |
 | Login: todas as falhas respondem o mesmo `401` `E-mail ou senha inválidos.` | Sem mudança | Já era a mensagem; agora também em tempo equivalente |
-| Fluxo do convite, DTOs, JWT, perfis e datas | Sem mudança | — |
+| Fluxo do convite, DTOs, JWT, perfis e datas | Sem mudança na `1.1` | — |
 
 Limites e detalhes em `docs/CONFIGURACAO_SMTP.md`, seção 5.
 
@@ -56,10 +61,19 @@ A quilometragem não entra em nenhum cálculo financeiro (a política continua
 `rentabilidade-v1`). Migration `V12__abastecimento_quilometragem.sql`: coluna
 nula nos registros antigos; a coluna `hora` foi mantida com os dados antigos.
 
+### 1.3 Correção de 26/11/2026: datas só `AAAA-MM-DD` (branch `chore/estabilizacao-windows-seguranca-smtp`)
+
+| Mudança | Tipo | Efeito no front-end |
+|---|---|---|
+| Campos de data (`data`, `dataInicio`, `dataFim`… em qualquer corpo, inclusive listas) com horário: `"2026-11-21T14:30:00"`, `"2026-11-22T01:30:00.000Z"` | **`400`** (antes o horário era descartado em silêncio) | "Campo 'x' com valor inválido. Use o formato AAAA-MM-DD." Nada é gravado. Envie só a data local escolhida pelo usuário. **Não use `new Date().toISOString()`**: ele converte para UTC, e à noite no Brasil a data vira o dia seguinte. Antes da correção, esse dia seguinte era gravado (ou recusado como "data no futuro") |
+
+Não muda rota, campo, tipo de resposta nem permissão: o contrato sempre foi
+`AAAA-MM-DD` (seção 2); a API só deixou de aceitar o que estava fora dele.
+
 ## 2. Convenções
 
 - **Base:** `https://<URL-DA-API>` (ainda a definir; ver o documento de deploy). Prefixo `/api`.
-- **JSON UTF-8.** Datas `AAAA-MM-DD`; horas `HH:MM` ou `HH:MM:SS`; instantes
+- **JSON UTF-8.** Datas `AAAA-MM-DD`, sem horário (com horário: `400`, seção 1.3); horas `HH:MM` ou `HH:MM:SS`; instantes
   (`...Em`) em ISO-8601 UTC; "hoje" segue `America/Sao_Paulo`.
 - **Dinheiro e decimais:** número com até 2 casas (número ou texto numérico, `1500.00` ou `"1500.00"`).
 - **Inteiros:** só número inteiro do JSON; decimal, texto, vazio ou booleano: `400`.

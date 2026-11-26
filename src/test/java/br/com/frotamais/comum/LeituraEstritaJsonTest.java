@@ -107,6 +107,35 @@ class LeituraEstritaJsonTest extends ApiViagemTeste {
         assertEquals("hora", e.getPropertyName());
     }
 
+    /**
+     * Datas são só AAAA-MM-DD. Com horário, o Jackson descartaria a hora (e, com
+     * "Z", tomaria o dia em UTC: 21/11 às 22:30 em São Paulo viraria 22/11), e o
+     * abastecimento seria gravado num dia que não é o real.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = { "2025-06-02T14:30:00", "2025-06-02T00:00:00", "2025-06-03T01:30:00.000Z",
+            "2025-06-02T22:30:00-03:00", "2025-06-02 14:30" })
+    void jacksonRecusaDataComHorario(String data) {
+        String abastecimento = "{\"tipo\":\"DIESEL\",\"data\":\"" + data
+                + "\",\"quilometragem\":1,\"litros\":\"1\",\"valorTotal\":\"1\"}";
+        assertThrows(MismatchedInputException.class,
+                () -> objectMapper.readValue(abastecimento, AbastecimentoRequest.class), data);
+        String abertura = "{\"caminhaoId\":1,\"dataInicio\":\"" + data + "\"}";
+        assertThrows(MismatchedInputException.class,
+                () -> objectMapper.readValue(abertura, ViagemCriacaoRequest.class), data);
+        String finalizar = "{\"dataFim\":\"" + data + "\",\"kmFinalCarregado\":1}";
+        assertThrows(MismatchedInputException.class,
+                () -> objectMapper.readValue(finalizar, FinalizacaoRequest.class), data);
+    }
+
+    @Test
+    void jacksonAceitaDataSimples() throws Exception {
+        AbastecimentoRequest a = objectMapper.readValue(
+                "{\"tipo\":\"ARLA\",\"data\":\"2025-06-02\",\"quilometragem\":1,\"litros\":\"1\",\"valorTotal\":\"1\"}",
+                AbastecimentoRequest.class);
+        assertEquals(java.time.LocalDate.of(2025, 6, 2), a.data());
+    }
+
     // ---------- 2. Endpoints: 400 e nada gravado ----------
 
     @Test
