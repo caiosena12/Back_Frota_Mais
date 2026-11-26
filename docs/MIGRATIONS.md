@@ -38,13 +38,19 @@ Detalhes no comentário do topo de cada arquivo. Nenhuma versão apaga dados.
 
 ### 1. Instalação nova ou banco vazio
 
-Crie o banco vazio e suba a aplicação. O Flyway aplica todas as versões. Fora
-do perfil `dev`, informe `DB_URL`, `DB_USER` e `DB_PASSWORD`.
+Crie o banco vazio e suba a aplicação. O Flyway aplica todas as versões.
+Informe sempre `DB_URL` (desde 26/11/2026 também no perfil `dev`, que não tem
+mais banco padrão); fora do `dev`, também `DB_USER` e `DB_PASSWORD`. No
+Windows, o banco local de desenvolvimento é `frotamais_dev_local`, usado pelo
+`run-dev-frotamais.ps1`.
 
 ```bash
 psql -h localhost -U postgres -c "CREATE DATABASE frotamais"
-./run-dev-frotamais.sh
+DB_URL=jdbc:postgresql://localhost:5432/frotamais ./run-dev-frotamais.sh
 ```
+
+No Windows: `psql -h localhost -U postgres -c "CREATE DATABASE frotamais_dev_local"`
+e `.\run-dev-frotamais.ps1`.
 
 ### 2. Banco de testes
 
@@ -115,16 +121,15 @@ uma coluna vazia):**
    psql -h localhost -U postgres -v ON_ERROR_STOP=1 -d frotamais -f scripts/db/adequar-banco-legado-v1.sql
    ```
 4. Suba a API **uma vez** marcando a V1 como baseline. O Flyway registra a
-   versão 1 sem executá-la e aplica as seguintes (hoje, V2 a V11):
+   versão 1 sem executá-la e aplica as seguintes (hoje, V2 a V12):
    ```bash
-   SPRING_FLYWAY_BASELINE_ON_MIGRATE=true SPRING_FLYWAY_BASELINE_VERSION=1 ./run-dev-frotamais.sh
+   DB_URL=jdbc:postgresql://localhost:5432/frotamais SPRING_FLYWAY_BASELINE_ON_MIGRATE=true SPRING_FLYWAY_BASELINE_VERSION=1 ./run-dev-frotamais.sh
    ```
-   Nas próximas vezes, suba normalmente, sem essas variáveis.
-   Antes, confira se `DB_URL` não está definida na sessão (ou se aponta para o
-   banco certo): no perfil `dev`, sem `DB_URL`, a conexão vai para o
-   `frotamais`. Para ensaiar numa cópia, defina `DB_URL` explicitamente, por
-   exemplo `DB_URL=jdbc:postgresql://localhost:5432/frotamais_copia`.
-5. Confira o histórico (a última linha deve ser a `11`, com `success = t`):
+   Nas próximas vezes, suba normalmente, sem as variáveis do baseline.
+   O perfil `dev` não tem banco padrão: sem `DB_URL` a API não sobe (e o
+   `run-dev-frotamais.sh` avisa antes). Para ensaiar numa cópia, troque só o
+   banco, por exemplo `DB_URL=jdbc:postgresql://localhost:5432/frotamais_copia`.
+5. Confira o histórico (a última linha deve ser a `12`, com `success = t`):
    ```bash
    psql -h localhost -U postgres -d frotamais -c "select version, description, success from flyway_schema_history order by installed_rank"
    ```
