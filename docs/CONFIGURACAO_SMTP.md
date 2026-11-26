@@ -42,6 +42,43 @@ hospedagens bloqueiam a porta 25; não a use.
 ("Não foi possível enviar o e-mail agora. Nada foi gravado"). O log registra só
 o tipo da exceção, nunca o destinatário, o texto ou o link.
 
+### 2.1 SMTP real no Windows (Brevo)
+
+O envio pela Brevo já funcionou no Codespaces, mas as credenciais ficaram num
+arquivo ignorado pelo Git de lá, que o `git clone` não traz. No Windows:
+
+1. O modelo `.frotamais-smtp.env` (ignorado pelo Git, `*.env`) fica na raiz do
+   clone, com `SPRING_MAIL_HOST=smtp-relay.brevo.com`, porta `587`, STARTTLS
+   obrigatório e `CONVITE_URL_ATIVACAO` já preenchidos. Se ele não existir,
+   copie as chaves da tabela acima.
+2. Preencha **só no seu computador** (nunca em chat, issue, commit ou print):
+   - `SPRING_MAIL_USERNAME`: o **login SMTP** do painel da Brevo (SMTP & API →
+     SMTP). Não é o endereço do servidor.
+   - `SPRING_MAIL_PASSWORD`: a **chave SMTP** (`xsmtpsib-...`). Não é a chave de
+     API (`xkeysib-...`) nem a senha de login da conta. Se a chave antiga não
+     estiver guardada em local seguro, gere uma nova no painel.
+   - `EMAIL_REMETENTE`: um remetente **verificado** na Brevo (remetente
+     individual ou domínio autenticado). `front-frota-mais.vercel.app` é o
+     endereço do front-end, não um domínio de e-mail seu; não tente
+     autenticá-lo na Brevo.
+   - `CONVITE_URL_ATIVACAO`: a tela pública do front, `https://<front>/ativar-conta`
+     (nunca `/ativar`, `localhost`, URL do Codespaces ou a API na 8080).
+3. Suba com `.\run-dev-frotamais.ps1 -Email smtp`. O script carrega o arquivo sem
+   imprimir valores, confere se nada falta, exige a URL `https://.../ativar-conta`
+   e desliga a captura local (SMTP e captura juntos impedem a API de subir).
+   Sem `-Email smtp`, o padrão é a captura local.
+4. Mande **um** convite para um e-mail de teste seu e confira caixa de entrada
+   e spam. O `201` só prova que a Brevo aceitou a mensagem, não que ela chegou.
+
+Erros comuns da Brevo, que a API transforma em `503` (o log mostra só o tipo da
+exceção):
+
+| Código SMTP | Causa provável |
+|---|---|
+| `535` | Login ou chave SMTP errados, chave revogada, ou senha da conta no lugar da chave |
+| `525` | A conta restringe os IPs autorizados (a rede do Windows é outra que a do Codespaces). Liberar um IP é decisão do responsável pela conta |
+| `550`/remetente | `EMAIL_REMETENTE` não verificado |
+
 ## 3. Provedores analisados (pesquisa em 25/11/2026)
 
 Os números vêm das páginas oficiais citadas, que mudam com frequência.
