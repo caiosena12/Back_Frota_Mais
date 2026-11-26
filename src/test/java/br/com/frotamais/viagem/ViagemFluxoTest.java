@@ -287,12 +287,26 @@ class ViagemFluxoTest extends ApiViagemTeste {
         dinheiro(soma.toPlainString(), r.get("custoOperacionalTotal"));
     }
 
+    /**
+     * Empresa, status e valores calculados nunca vêm do cliente. Até a versão 1.1
+     * eram ignorados; desde os contratos 1.2 (comum/ConfigJackson) campo
+     * desconhecido é recusado com 400, e nada é criado.
+     */
     @Test
-    void valoresCalculadosEEmpresaEnviadosPeloClienteSaoIgnorados() throws Exception {
+    void valoresCalculadosEEmpresaEnviadosPeloClienteSaoRecusados() throws Exception {
         Map<String, Object> corpo = corpo("caminhaoId", caminhaoId, "dataInicio", "2025-03-03",
-                "origem", "A", "destino", "B", "valorFrete", "1000.00", "kmInicialCarregado", 0,
-                "empresaId", 999999, "status", "FINALIZADA", "lucro", "999999.00",
+                "origem", "A", "destino", "B", "valorFrete", "1000.00", "kmInicialCarregado", 0);
+        Map<String, Object> proibidos = corpo("empresaId", 999999, "status", "FINALIZADA", "lucro", "999999.00",
                 "custoOperacionalTotal", "0.00");
+        for (var campo : proibidos.entrySet()) {
+            Map<String, Object> comCampo = new java.util.LinkedHashMap<>(corpo);
+            comCampo.put(campo.getKey(), campo.getValue());
+            JsonNode erro = chamar(POST(VIAGENS), token, comCampo, 400);
+            assertTrue(erro.get("detalhes").toString().contains("Campo desconhecido: '" + campo.getKey() + "'."),
+                    erro::toString);
+        }
+        assertEquals(0, chamar(GET(VIAGENS), token, null, 200).size(), "nenhuma viagem criada");
+
         JsonNode v = chamar(POST(VIAGENS), token, corpo, 201);
 
         assertEquals("EM_ANDAMENTO", v.get("status").asString());

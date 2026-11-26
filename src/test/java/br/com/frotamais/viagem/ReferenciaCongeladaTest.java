@@ -68,7 +68,7 @@ class ReferenciaCongeladaTest extends ApiViagemTeste {
 
         // Diesel aparece retroativamente em X (correção explícita de X: Arla → diesel).
         chamar(PUT(VIAGENS + "/" + x + "/abastecimentos/" + arlaX), token, corpo("tipo", "DIESEL",
-                "data", "2025-03-01", "litros", "100", "valorTotal", "600.00"), 200);
+                "data", "2025-03-01", "quilometragem", 150000, "litros", "100", "valorTotal", "600.00"), 200);
         assertEquals("ABASTECIMENTOS_DA_VIAGEM", rentabilidade(x).get("origemPrecoDiesel").asString());
 
         // A continua exatamente como foi finalizado.
@@ -98,7 +98,7 @@ class ReferenciaCongeladaTest extends ApiViagemTeste {
 
         // Correção explícita do diesel de f1: f1 é recalculado...
         chamar(PUT(VIAGENS + "/" + f1 + "/abastecimentos/" + dieselF1), token, corpo("tipo", "DIESEL",
-                "data", "2025-03-01", "litros", "100", "valorTotal", "700.00"), 200);
+                "data", "2025-03-01", "quilometragem", 150000, "litros", "100", "valorTotal", "700.00"), 200);
         JsonNode r1 = rentabilidade(f1);
         dinheiro("7.00", r1.get("precoMedioDiesel"));
         dinheiro("-120.00", r1.get("lucro"));
@@ -135,7 +135,7 @@ class ReferenciaCongeladaTest extends ApiViagemTeste {
 
         // Enquanto está em andamento, a viagem acompanha a correção do frete anterior.
         chamar(PUT(VIAGENS + "/" + f1 + "/abastecimentos/" + dieselF1), token, corpo("tipo", "DIESEL",
-                "data", "2025-03-01", "litros", "100", "valorTotal", "700.00"), 200);
+                "data", "2025-03-01", "quilometragem", 150000, "litros", "100", "valorTotal", "700.00"), 200);
         dinheiro("7.00", rentabilidade(aberta).get("precoMedioDiesel"));
 
         // Ao finalizar, congela o preço daquele momento.
@@ -152,7 +152,7 @@ class ReferenciaCongeladaTest extends ApiViagemTeste {
         dinheiro("6.20", fechar(f, "2025-03-02").get("precoMedioDiesel"));
 
         chamar(PUT(VIAGENS + "/" + f + "/abastecimentos/" + d1), token, corpo("tipo", "DIESEL",
-                "data", "2025-03-01", "litros", "100", "valorTotal", "540.00"), 200);
+                "data", "2025-03-01", "quilometragem", 150000, "litros", "100", "valorTotal", "540.00"), 200);
         JsonNode r = rentabilidade(f);
         dinheiro("6.00", r.get("precoMedioDiesel"));   // (540 + 1260) ÷ 300
         dinheiro("40.00", r.get("lucro"));

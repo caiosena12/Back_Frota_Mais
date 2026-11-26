@@ -189,7 +189,7 @@ class ConcorrenciaViagemTest extends ApiViagemTeste {
 
             List<Integer> status = simultaneas(List.of(
                     post(VIAGENS + "/" + seguinte + "/abastecimentos", corpo("tipo", "DIESEL",
-                            "data", "2025-03-06", "litros", "100", "valorTotal", "600.00")),
+                            "data", "2025-03-06", "quilometragem", 150000, "litros", "100", "valorTotal", "600.00")),
                     comToken(PUT(VIAGENS + "/" + anterior), corpo("dataInicio", "2025-03-01",
                             "dataFim", "2025-03-08", "origem", "A", "destino", "B", "valorFrete", "1000.00",
                             "kmInicialCarregado", 0, "kmFinalCarregado", 400, "consumoMedioCarregado", "2.50"))));

@@ -3,13 +3,10 @@ package br.com.frotamais.viagem;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.time.LocalTime;
 
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import br.com.frotamais.comum.Datas;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -38,9 +35,9 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
                 "origem", "B", "destino", "C", "valorFrete", "2000.00", "kmInicialCarregado", 600));
     }
 
-    private JsonNode abastecer(String token, long viagem, String data, String hora, int status) throws Exception {
+    private JsonNode abastecer(String token, long viagem, String data, Integer quilometragem, int status) throws Exception {
         return chamar(POST(VIAGENS + "/" + viagem + "/abastecimentos"), token, corpo("tipo", "DIESEL",
-                "data", data, "hora", hora, "litros", "100", "valorTotal", "700.00"), status);
+                "data", data, "quilometragem", quilometragem, "litros", "100", "valorTotal", "700.00"), status);
     }
 
     private void erro(JsonNode resposta, String trecho) {
@@ -54,12 +51,13 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
     }
 
     @Test
-    void abastecimentoEntreViagensVaiParaASeguinteComDataEHoraReais() throws Exception {
+    void abastecimentoEntreViagensVaiParaASeguinteComDataEQuilometragemReais() throws Exception {
         String antes = buscarViagem(dono, anterior).get("rentabilidade").toString();
 
-        JsonNode a = abastecer(dono, seguinte, "2025-06-07", "14:30", 201);
+        JsonNode a = abastecer(dono, seguinte, "2025-06-07", 152430, 201);
         assertEquals("2025-06-07", a.get("data").asString());
-        assertEquals("14:30:00", a.get("hora").asString());
+        assertEquals(152430, a.get("quilometragem").asInt());
+        assertTrue(a.get("hora").isNull());
 
         // A anterior não muda; a seguinte usa o preço do próprio abastecimento.
         assertEquals(antes, buscarViagem(dono, anterior).get("rentabilidade").toString());
@@ -76,8 +74,8 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
 
     @Test
     void intervaloComecaNoDiaEmQueAAnteriorTerminou() throws Exception {
-        abastecer(dono, seguinte, "2025-06-05", null, 201);
-        erro(abastecer(dono, seguinte, "2025-06-04", null, 400), "a partir do fim da viagem anterior");
+        abastecer(dono, seguinte, "2025-06-05", 150000, 201);
+        erro(abastecer(dono, seguinte, "2025-06-04", 150000, 400), "a partir do fim da viagem anterior");
         assertEquals(1, buscarViagem(dono, seguinte).get("abastecimentosDiesel").size());
     }
 
@@ -86,13 +84,13 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
         long outro = criarCaminhao(dono);
         long primeira = criarViagem(dono, corpo("caminhaoId", outro, "dataInicio", "2025-06-10",
                 "kmInicialCarregado", 0));
-        JsonNode a = abastecer(dono, primeira, "2024-01-15", "07:00", 201);
+        JsonNode a = abastecer(dono, primeira, "2024-01-15", 150100, 201);
         assertEquals("2024-01-15", a.get("data").asString());
         JsonNode h = chamar(POST(VIAGENS + "/historicas"), dono, corpo("caminhaoId", criarCaminhao(dono),
                 "dataInicio", "2025-05-10", "dataFim", "2025-05-12", "origem", "X", "destino", "Y",
                 "valorFrete", "500.00", "kmInicialCarregado", 0, "kmFinalCarregado", 100,
                 "consumoMedioCarregado", "2.50", "abastecimentos", java.util.List.of(corpo("tipo", "DIESEL",
-                        "data", "2025-03-01", "litros", "50", "valorTotal", "300.00"))), 201);
+                        "data", "2025-03-01", "quilometragem", 150000, "litros", "50", "valorTotal", "300.00"))), 201);
         assertEquals("2025-03-01", h.get("abastecimentosDiesel").get(0).get("data").asString());
     }
 
@@ -101,7 +99,7 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
         long outro = criarCaminhao(dono);
         long primeira = criarViagem(dono, corpo("caminhaoId", outro, "dataInicio", "2025-06-10",
                 "kmInicialCarregado", 0));
-        abastecer(dono, primeira, "2025-06-01", null, 201);
+        abastecer(dono, primeira, "2025-06-01", 150000, 201);
         // Uma histórica que termina depois do abastecimento antecipado ficaria com ele no período.
         erro(chamar(POST(VIAGENS + "/historicas"), dono, corpo("caminhaoId", outro, "dataInicio", "2025-05-20",
                 "dataFim", "2025-06-02", "origem", "X", "destino", "Y", "valorFrete", "500.00",
@@ -118,7 +116,7 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
 
     @Test
     void anteriorNaoPassaOFimParaDepoisDoAbastecimentoDaSeguinte() throws Exception {
-        abastecer(dono, seguinte, "2025-06-07", null, 201);
+        abastecer(dono, seguinte, "2025-06-07", 150000, 201);
         String url = VIAGENS + "/" + anterior;
         erro(chamar(PUT(url), dono, corpo("dataInicio", "2025-06-01", "dataFim", "2025-06-08",
                 "origem", "A", "destino", "B", "valorFrete", "1000.00", "kmInicialCarregado", 0,
@@ -131,7 +129,7 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
 
     @Test
     void historicaNoIntervaloNaoEngoleOAbastecimentoDaSeguinte() throws Exception {
-        abastecer(dono, seguinte, "2025-06-07", null, 201);
+        abastecer(dono, seguinte, "2025-06-07", 150000, 201);
         erro(chamar(POST(VIAGENS + "/historicas"), dono, historica("2025-06-06", "2025-06-08"), 409),
                 "viagem seguinte");
         chamar(POST(VIAGENS + "/historicas"), dono, historica("2025-06-06", "2025-06-07"), 201);
@@ -146,14 +144,14 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
                 "dataInicio", "2025-06-20", "dataFim", "2025-06-22", "origem", "X", "destino", "Y",
                 "valorFrete", "500.00", "kmInicialCarregado", 1200, "kmFinalCarregado", 1300,
                 "consumoMedioCarregado", "2.50", "abastecimentos", java.util.List.of(corpo("tipo", "DIESEL",
-                        "data", "2025-06-15", "hora", "08:00", "litros", "50", "valorTotal", "300.00"))), 201);
+                        "data", "2025-06-15", "quilometragem", 1150, "litros", "50", "valorTotal", "300.00"))), 201);
         assertEquals("2025-06-15", v.get("abastecimentosDiesel").get(0).get("data").asString());
         dinheiro("6.00", v.get("rentabilidade").get("precoMedioDiesel"));
     }
 
     @Test
     void mudarOInicioReavaliaOsAbastecimentos() throws Exception {
-        abastecer(dono, seguinte, "2025-06-07", null, 201);
+        abastecer(dono, seguinte, "2025-06-07", 150000, 201);
         String url = VIAGENS + "/" + seguinte;
         // Início mais cedo: o abastecimento passa a estar dentro do período.
         chamar(PUT(url), dono, corpo("dataInicio", "2025-06-06", "origem", "B", "destino", "C",
@@ -166,16 +164,6 @@ class AbastecimentoEntreViagensTest extends ApiViagemTeste {
     @Test
     void motoristaVinculadoRegistraAbastecimentoEntreViagens() throws Exception {
         Motorista motorista = criarMotorista(dono, caminhaoId);
-        abastecer(motorista.token(), seguinte, "2025-06-08", "06:15", 201);
-    }
-
-    @Test
-    void horarioNoFuturoERecusado() throws Exception {
-        LocalTime daquiAUmaHora = LocalTime.now(Datas.FUSO).plusHours(1);
-        Assumptions.assumeTrue(daquiAUmaHora.isAfter(LocalTime.of(1, 0)), "perto da meia-noite");
-        long outro = criarCaminhao(dono);
-        long hoje = criarViagem(dono, corpo("caminhaoId", outro, "dataInicio", Datas.hoje().toString(),
-                "kmInicialCarregado", 0));
-        erro(abastecer(dono, hoje, Datas.hoje().toString(), daquiAUmaHora.withNano(0).toString(), 400), "futuro");
+        abastecer(motorista.token(), seguinte, "2025-06-08", 150200, 201);
     }
 }

@@ -144,7 +144,7 @@ class CancelamentoViagemTest extends ApiViagemTeste {
         chamar(POST(url + "/despesas-extras"), motorista.token(), corpo("descricao", "x", "data", "2025-06-02",
                 "valor", "5.00"), 403);
         chamar(POST(url + "/abastecimentos"), motorista.token(), corpo("tipo", "DIESEL", "data", "2025-06-02",
-                "litros", "10", "valorTotal", "60.00"), 403);
+                "quilometragem", 150000, "litros", "10", "valorTotal", "60.00"), 403);
         // Motorista não altera viagem encerrada.
         chamar(PUT(url + "/pedagios/" + pedagioId), motorista.token(),
                 corpo("data", "2025-06-02", "valor", "1.00"), 403);

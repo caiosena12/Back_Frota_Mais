@@ -46,7 +46,7 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
     }
 
     private static Map<String, Object> diesel(String data, String valor) {
-        return corpo("tipo", "DIESEL", "data", data, "litros", "100", "valorTotal", valor);
+        return corpo("tipo", "DIESEL", "data", data, "quilometragem", 150000, "litros", "100", "valorTotal", valor);
     }
 
     @Test
@@ -56,7 +56,7 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
         for (JsonNode erro : new JsonNode[] {
                 chamar(POST(url + "/abastecimentos"), token, diesel("2025-03-02", "900.00"), 409),
                 chamar(POST(url + "/abastecimentos"), token, corpo("tipo", "ARLA", "data", "2025-03-02",
-                        "litros", "10", "valorTotal", "30.00"), 409),
+                        "quilometragem", 150000, "litros", "10", "valorTotal", "30.00"), 409),
                 chamar(POST(url + "/pedagios"), token, corpo("data", "2025-03-02", "valor", "5.00"), 409),
                 chamar(POST(url + "/despesas-extras"), token, corpo("descricao", "Borracharia",
                         "data", "2025-03-02", "valor", "80.00"), 409)}) {
@@ -86,7 +86,7 @@ class LancamentoViagemFinalizadaTest extends ApiViagemTeste {
     void donoCorrigeLancamentosExistentesDentroDoPeriodo() throws Exception {
         chamar(PUT(url + "/abastecimentos/" + dieselId), token, diesel("2025-03-02", "650.00"), 200);
         chamar(PUT(url + "/abastecimentos/" + arlaId), token, corpo("tipo", "ARLA", "data", "2025-03-02",
-                "litros", "20", "valorTotal", "70.00"), 200);
+                "quilometragem", 150000, "litros", "20", "valorTotal", "70.00"), 200);
         chamar(PUT(url + "/pedagios/" + pedagioId), token, corpo("data", "2025-03-03", "valor", "12.00"), 200);
         chamar(PUT(url + "/despesas-extras/" + extraId), token, corpo("descricao", "Lavagem completa",
                 "data", "2025-03-03", "valor", "55.00"), 200);

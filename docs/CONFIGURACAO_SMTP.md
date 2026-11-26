@@ -30,7 +30,7 @@ Nenhuma delas vai para arquivo versionado. Cadastre-as no painel de segredos da 
 | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH` | `true` | |
 | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE` | `true` | Use também `..._STARTTLS_REQUIRED=true` para não aceitar conexão sem TLS |
 | `EMAIL_REMETENTE` | `nao-responda@dominio.exemplo` | Precisa estar **verificado** no provedor |
-| `CONVITE_URL_ATIVACAO` | `https://app.exemplo/ativar` | Tela de ativação do front-end (https em produção) |
+| `CONVITE_URL_ATIVACAO` | `https://app.exemplo/ativar-conta` | Tela de ativação do front-end (https em produção) |
 | `CONVITE_VALIDADE_HORAS` | `24` | De 1 a 720 |
 | `SMTP_TIMEOUT_MS` | `10000` | Timeout de conexão, leitura e escrita (padrão 10 s). Estourou: `503`, nada gravado |
 
@@ -94,7 +94,7 @@ Passo a passo (Codespaces, banco isolado montado pelas migrations):
 ```bash
 psql -h localhost -U postgres -c "CREATE DATABASE frotamais_ensaio_motorista"   # só na primeira vez
 FROTAMAIS_INTEGRACAO_DB=frotamais_ensaio_motorista EMAIL_CAPTURA_LOCAL=true \
-CONVITE_URL_ATIVACAO=http://localhost:4200/ativar ./run-integracao-frotamais.sh
+CONVITE_URL_ATIVACAO=http://localhost:4200/ativar-conta ./run-integracao-frotamais.sh
 ```
 
 1. Registre um DONO (`POST /api/auth/registro`, e-mail `@exemplo.test`).

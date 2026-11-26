@@ -9,7 +9,10 @@ testes em `src/test/java` comprovam cada regra com tokens reais.
 - **CORS:** só as origens exatas de `CORS_ORIGENS_PERMITIDAS` (métodos `GET`,
   `POST`, `PUT`, `DELETE`; cabeçalhos `Authorization`, `Content-Type`,
   `Accept`; sem cookies). Outra origem: `403` no preflight, em texto simples,
-  gerado pelo filtro de CORS.
+  gerado pelo filtro de CORS. Com a lista vazia (padrão do perfil `dev`, para
+  usar o proxy do Angular), nenhuma origem recebe cabeçalhos CORS: o preflight
+  pode responder `200`, mas sem `Access-Control-Allow-Origin`, e o navegador
+  bloqueia a chamada.
 - **Health check:** `GET /actuator/health` (público) → `{"status":"UP"}`, sem
   detalhes; também `/actuator/health/liveness` e `/readiness`.
 - **Autenticação:** `Authorization: Bearer <token>`, obtido no registro, no
@@ -21,6 +24,11 @@ testes em `src/test/java` comprovam cada regra com tokens reais.
 - **Datas:** `AAAA-MM-DD`; horas `HH:MM` ou `HH:MM:SS`; instantes em ISO-8601
   UTC. "Hoje" e "agora" seguem o fuso `America/Sao_Paulo`.
 - **Dinheiro:** número decimal com até 2 casas (`"1500.00"` ou `1500.00`).
+- **Inteiros** (km, `quilometragem`, `ano`, `eixos`, `capacidadeTanqueLitros`,
+  ids, `caminhaoIds`): só número inteiro do JSON. `1.5`, `"6"`, `""` ou `true`
+  respondem `400` ("Campo 'x' com valor inválido."), sem truncar nem converter.
+- **Campo desconhecido** no corpo, inclusive dentro de listas: `400`
+  ("Campo desconhecido: 'x'."). Nada é gravado (`comum/ConfigJackson`).
 - **PUT é substituição integral:** envie todos os campos do recurso, inclusive
   os que não mudaram. Campo opcional ausente vira nulo. Não há `PATCH`.
 - **Valores nulos** em cálculos significam "não calculável com os dados
@@ -36,7 +44,7 @@ Todas as respostas de erro, inclusive `401` e `403`, têm o mesmo corpo:
 
 | Código | Quando |
 |---|---|
-| `400` | Validação, JSON malformado, enum ou data inválidos, parâmetro com tipo errado, regra de dados (ex.: data fora do período) |
+| `400` | Validação, JSON malformado, campo desconhecido, inteiro com decimal ou texto, enum ou data inválidos, parâmetro com tipo errado, regra de dados (ex.: data fora do período) |
 | `401` | Sem token, token inválido ou expirado, usuário inativo, login recusado |
 | `403` | Perfil sem permissão para a operação |
 | `404` | Recurso inexistente ou de outra empresa; rota inexistente |
@@ -187,7 +195,7 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 
 | Recurso | Corpo | Regras |
 |---|---|---|
-| `abastecimentos` | `tipo` (`DIESEL` ou `ARLA`), `data`, `hora` (opcional), `litros`, `valorTotal` | Diesel com preço plausível e litros até a capacidade do tanque, se cadastrada |
+| `abastecimentos` | `tipo` (`DIESEL` ou `ARLA`), `data`, `quilometragem` (inteiro, km do odômetro, `0` a `9999999`), `litros`, `valorTotal` | Quilometragem obrigatória (só a correção de um abastecimento antigo, gravado sem ela, pode omitir). Diesel com preço plausível e litros até a capacidade do tanque, se cadastrada |
 | `pedagios` | `data`, `valor` | |
 | `despesas-extras` | `descricao` (livre), `data`, `valor` | Nenhuma palavra é bloqueada |
 
@@ -197,7 +205,7 @@ compartilhado) e não começam no mesmo dia (`409`). Datas no futuro: `400`.
 - Pedágios e despesas ficam dentro do período da viagem.
 - Abastecimento também pode ser **anterior ao início**, se foi feito entre
   viagens: a partir do dia em que a viagem anterior do caminhão terminou. Ele
-  pertence à viagem seguinte, com data e hora reais. Sem viagem anterior
+  pertence à viagem seguinte, com a data e a quilometragem reais. Sem viagem anterior
   (primeiro frete do caminhão), qualquer data anterior ao início é aceita, sem
   limite de dias. A data nunca é ajustada para coincidir com o início.
 - A data final de uma viagem não pode passar dos abastecimentos antecipados

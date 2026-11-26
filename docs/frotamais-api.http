@@ -186,7 +186,7 @@ Content-Type: application/json
   "kmInicialCarregado": 120000,
   "consumoMedioCarregado": 2.50,
   "abastecimentos": [
-    { "tipo": "DIESEL", "data": "2026-11-20", "hora": "07:30", "litros": 400, "valorTotal": 2400.00 }
+    { "tipo": "DIESEL", "data": "2026-11-20", "quilometragem": 152100, "litros": 400, "valorTotal": 2400.00 }
   ]
 }
 
@@ -271,7 +271,7 @@ POST {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "tipo": "DIESEL", "data": "2026-11-21", "hora": "14:10", "litros": 300, "valorTotal": 1830.00 }
+{ "tipo": "DIESEL", "data": "2026-11-21", "quilometragem": 152430, "litros": 300, "valorTotal": 1830.00 }
 
 ### Abastecimento: Arla
 POST {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos
@@ -285,7 +285,7 @@ PUT {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos/{{lancamentoId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "tipo": "DIESEL", "data": "2026-11-21", "hora": "14:10", "litros": 310, "valorTotal": 1891.00 }
+{ "tipo": "DIESEL", "data": "2026-11-21", "quilometragem": 152430, "litros": 310, "valorTotal": 1891.00 }
 
 ### Excluir abastecimento (só com a viagem em andamento)
 DELETE {{baseUrl}}/api/viagens/{{viagemId}}/abastecimentos/{{lancamentoId}}

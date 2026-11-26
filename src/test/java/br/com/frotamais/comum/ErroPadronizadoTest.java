@@ -96,7 +96,7 @@ class ErroPadronizadoTest extends ApiViagemTeste {
         long viagem = criarViagem(token, corpo("caminhaoId", caminhao, "dataInicio", "2025-01-10",
                 "kmInicialCarregado", 1000));
         JsonNode erro = chamar(POST(VIAGENS + "/" + viagem + "/abastecimentos"), token,
-                corpo("tipo", "GASOLINA", "data", "2025-01-10", "litros", "10", "valorTotal", "60"), 400);
+                corpo("tipo", "GASOLINA", "data", "2025-01-10", "quilometragem", 150000, "litros", "10", "valorTotal", "60"), 400);
         formatoPadrao(erro, 400, "Dados inválidos");
         contem(erro, "tipo");
         contem(erro, "DIESEL");

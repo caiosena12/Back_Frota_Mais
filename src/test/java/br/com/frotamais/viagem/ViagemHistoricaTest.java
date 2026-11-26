@@ -77,8 +77,8 @@ class ViagemHistoricaTest extends ApiViagemTeste {
         c.put("kmFinalCarregado", 600);
         c.put("consumoMedioVazio", "4.00");
         c.put("abastecimentos", List.of(
-                corpo("tipo", "DIESEL", "data", "2025-03-10", "litros", "100", "valorTotal", "650.00"),
-                corpo("tipo", "ARLA", "data", "2025-03-11", "litros", "20", "valorTotal", "60.00")));
+                corpo("tipo", "DIESEL", "data", "2025-03-10", "quilometragem", 150000, "litros", "100", "valorTotal", "650.00"),
+                corpo("tipo", "ARLA", "data", "2025-03-11", "quilometragem", 150000, "litros", "20", "valorTotal", "60.00")));
         c.put("pedagios", List.of(corpo("data", "2025-03-11", "valor", "40.00")));
         c.put("despesasExtras", List.of(corpo("descricao", "Lavagem", "data", "2025-03-12", "valor", "50.00")));
         JsonNode v = cadastrar(c, 201);
@@ -217,11 +217,11 @@ class ViagemHistoricaTest extends ApiViagemTeste {
         for (Map<String, Object> extra : List.of(
                 Map.<String, Object>of("pedagios", List.of(corpo("data", "2025-03-13", "valor", "10.00"))),
                 Map.<String, Object>of("abastecimentos", List.of(
-                        corpo("tipo", "DIESEL", "data", "2025-03-10", "litros", "500", "valorTotal", "0.01"))),
+                        corpo("tipo", "DIESEL", "data", "2025-03-10", "quilometragem", 150000, "litros", "500", "valorTotal", "0.01"))),
                 Map.<String, Object>of("abastecimentos", List.of(
-                        corpo("tipo", "DIESEL", "data", "2025-03-10", "litros", "601", "valorTotal", "3606.00"))),
+                        corpo("tipo", "DIESEL", "data", "2025-03-10", "quilometragem", 150000, "litros", "601", "valorTotal", "3606.00"))),
                 Map.<String, Object>of("abastecimentos", List.of(
-                        corpo("tipo", "ARLA", "data", "2025-03-10", "litros", "0", "valorTotal", "10.00"))))) {
+                        corpo("tipo", "ARLA", "data", "2025-03-10", "quilometragem", 150000, "litros", "0", "valorTotal", "10.00"))))) {
             Map<String, Object> c = historica("2025-03-10", "2025-03-12");
             c.putAll(extra);
             cadastrar(c, 400);

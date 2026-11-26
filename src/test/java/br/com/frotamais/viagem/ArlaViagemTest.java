@@ -22,7 +22,7 @@ class ArlaViagemTest extends ApiViagemTeste {
 
         for (String[] lv : new String[][] {{"0", "10.00"}, {"-1", "10.00"}, {"10", "0"}, {"10", "-5.00"},
                 {null, "10.00"}, {"10", null}}) {
-            chamar(POST(url), token, corpo("tipo", "ARLA", "data", "2025-03-01", "litros", lv[0],
+            chamar(POST(url), token, corpo("tipo", "ARLA", "data", "2025-03-01", "quilometragem", 150000, "litros", lv[0],
                     "valorTotal", lv[1]), 400);
         }
 
